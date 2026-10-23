@@ -1,0 +1,13 @@
+.venv-build/
+build/
+dist/
+vendor/
+__pycache__/
+*.py[cod]
+*.log
+*.dem
+.env
+*.pem
+*.key
+.idea/
+.vscode/

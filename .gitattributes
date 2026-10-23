@@ -1,0 +1,11 @@
+* text=auto
+
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.exe binary
+*.zip binary
+*.pyd binary
+*.dll binary
