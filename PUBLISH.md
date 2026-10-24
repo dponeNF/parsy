@@ -1,96 +1,67 @@
 # Публикация Parsy на GitHub
 
-Локальный репозиторий уже подготовлен: файлы добавлены в индекс Git, `.gitignore` исключает сборки, демки и виртуальное окружение. Коммит не сделан специально, чтобы он был подписан твоим именем и email. Осталось создать репозиторий на GitHub, сделать коммит, отправить его и оформить Release.
+Релиз `1.0.0` уже опубликован. Ниже — порядок выпуска `1.1.0` с AI-тренером и автообновлением.
 
-## 1. Создай пустой репозиторий
-
-На GitHub: **New repository**.
-
-- Имя: `parsy` или другое;
-- Видимость: **Public**, если приложение должно быть доступно всем;
-- **Не добавляй** README, `.gitignore` и лицензию — они уже есть локально.
-
-После создания скопируй URL вида:
-
-```text
-https://github.com/ТВОЙ_НИК/parsy.git
-```
-
-## 2. Сделай коммит
-
-В PowerShell:
+## 1. Проверь сборку
 
 ```powershell
 Set-Location "C:\Users\Admin\Desktop\parser_alpha_1_0"
 
-git config user.name "Твоё Имя"
-git config user.email "твой@email"
-
-git commit -m "Initial Parsy release v1.0.0"
+.\.venv-build\Scripts\python.exe -m py_compile app.py advisor.py updater.py main.py
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-Email лучше указывать тот же, что привязан к GitHub. Если не хочешь публиковать личный email, включи в GitHub приватный email и используй адрес вида `12345678+ТВОЙ_НИК@users.noreply.github.com`.
+Проверь вручную:
 
-## 3. Отправь код на GitHub
+- AI-вкладка открывается и строит локальный план;
+- установленная версия видит обновление;
+- Portable показывает ссылку на GitHub вместо кнопки автообновления;
+- после обновления сохраняются настройки и данные.
+
+## 2. Сделай коммит и отправь код
 
 ```powershell
-git remote add origin https://github.com/ТВОЙ_НИК/parsy.git
-git push -u origin main
+git status
+git diff
+git add app.py advisor.py updater.py main.py Parsy.spec build.ps1 version_info.txt installer\Parsy.iss README.md DESKTOP_BUILD.md PUBLISH.md docs\RELEASE_NOTES_1.1.0.md
+git commit -m "Release Parsy 1.1.0"
+git push
 ```
 
-Если Git попросит авторизацию, откроется браузер Git Credential Manager. Обычный пароль GitHub не подойдёт: нужен вход через браузер или Personal Access Token.
+Не добавляй `dist`, `build`, `vendor` и `.venv-build` — они исключены через `.gitignore`.
 
-Если `origin` уже существует:
+## 3. Создай Release
 
-```powershell
-git remote set-url origin https://github.com/ТВОЙ_НИК/parsy.git
-git push -u origin main
-```
-
-## 4. Создай Release
-
-В репозитории: **Releases** → **Draft a new release**.
+В репозитории `https://github.com/dponeNF/parsy`: **Releases** → **Draft a new release**.
 
 Заполни:
 
-- **Choose a tag**: `v1.0.0`, создай новый тег от `main`;
-- **Release title**: `Parsy 1.0.0`;
-- **Describe this release**: вставь текст из `docs\RELEASE_NOTES_1.0.0.md`;
-- **Attach binaries**: прикрепи три файла:
-  - `dist\Parsy-Setup-1.0.0.exe`
+- **Choose a tag**: `v1.1.0`, создай новый тег от `main`;
+- **Release title**: `Parsy 1.1.0`;
+- **Describe this release**: вставь текст из `docs\RELEASE_NOTES_1.1.0.md`;
+- **Attach binaries**:
+  - `dist\Parsy-Setup-1.1.0.exe`
   - `dist\Parsy-Portable.zip`
   - `dist\SHA256SUMS.txt`
 
-Не загружай папку `dist` целиком или `dist\Parsy` — только эти три файла. Нажми **Publish release**.
+Не загружай папку `dist` целиком или `dist\Parsy` — только эти три файла.
 
-После публикации ссылка для скачивания будет такой:
+Нажми **Publish release**. После публикации `releases/latest` должен указывать на `1.1.0`.
 
-```text
-https://github.com/ТВОЙ_НИК/parsy/releases/latest
-```
+## 4. Проверь автообновление
 
-## 5. Проверь результат
+1. Установи `Parsy-Setup-1.1.0.exe` поверх `1.0.0`.
+2. Запусти Parsy и нажми «Проверить обновления».
+3. Для проверки следующего релиза временно подними версию в тестовой сборке или используй локальный `PARSY_UPDATE_API`.
+4. Убедись, что Setup скачивается, SHA-256 совпадает, приложение закрывается и запускается снова.
+5. Проверь `%LOCALAPPDATA%\Parsy\logs\update.log`.
 
-- Открой README на GitHub: описание, скриншот и ссылки должны отображаться.
-- Открой Release и скачай Setup.
-- Установи и запусти Parsy.
-- Проверь, что в Release прикреплены все три файла.
-- Ссылку на `releases/latest` можно давать игрокам.
+Updater выбирает первый ассет `Parsy-Setup-*.exe` в latest release. Если Setup не прикреплён или tag не содержит версию, обновление не сработает.
 
-## 6. Настрой репозиторий по желанию
+## 5. Важно
 
-В **About** справа на странице репозитория:
-
-- Description: `Локальный разбор демок CS2 в нативном Windows-приложении`;
-- Topics: `cs2`, `counter-strike-2`, `demo-parser`, `streamlit`, `pywebview`, `windows`;
-- Social preview: загрузи `docs\parsy-preview.png`.
-
-Если проект публичный и ты хочешь разрешить использование и модификацию кода, добавь файл `LICENSE` (например, MIT). Сейчас лицензия не задана.
-
-## Важно
-
-- Не добавляй в Git папки `dist`, `build`, `vendor` и `.venv-build` — они исключены через `.gitignore`.
-- Установщик и Portable-архив больше 100 MB, поэтому GitHub не примет их в обычный коммит. Они загружаются только как файлы Release.
+- GitHub принимает крупные файлы только как ассеты Release, не в обычный коммит.
 - GitHub Release позволяет прикреплять файлы до 2 GB.
-- Если репозиторий приватный, скачать релиз смогут только приглашённые пользователи. Для публичной раздачи нужен **Public**-репозиторий.
+- Для публичной раздачи репозиторий должен быть **Public**.
+- Установщик не подписан код-сертификатом: SmartScreen может показать предупреждение.
 - Не коммить токены, пароли и личные ключи.

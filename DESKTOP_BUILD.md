@@ -6,7 +6,7 @@ Parsy — локальное Windows-приложение для разбора 
 
 После сборки результаты лежат в `dist`:
 
-- `Parsy-Setup-1.0.0.exe` — установщик для игроков.
+- `Parsy-Setup-1.1.0.exe` — установщик для игроков.
 - `Parsy-Portable.zip` — Portable-версия, которую нужно полностью распаковать.
 - `Parsy\Parsy.exe` — распакованная Portable-папка.
 - `SHA256SUMS.txt` — контрольные суммы артефактов.
@@ -21,10 +21,11 @@ Parsy — локальное Windows-приложение для разбора 
 
 ### Установщик
 
-1. Запустить `Parsy-Setup-1.0.0.exe`.
+1. Запустить `Parsy-Setup-1.1.0.exe`.
 2. Если Windows SmartScreen покажет предупреждение, нажать «Подробнее» → «Выполнить в любом случае». Установщик пока не подписан сертификатом.
 3. Пройти установку. Права администратора не нужны: приложение ставится в `%LOCALAPPDATA%\Programs\Parsy`.
 4. Запустить Parsy из меню «Пуск» или с рабочего стола.
+5. Дальше установленная версия проверяет обновления в боковой панели и обновляется одной кнопкой.
 
 Если Microsoft Edge WebView2 Runtime не установлен, установщик запустит официальный bootstrapper Microsoft. Для этого нужен интернет. WebView2 уже есть на большинстве Windows 10/11.
 
@@ -42,8 +43,11 @@ Parsy — локальное Windows-приложение для разбора 
 - Логи: `%LOCALAPPDATA%\Parsy\logs`
 - `gui.log` — запуск окна, ошибки оболочки.
 - `server.log` — запуск локального Streamlit-сервера.
+- `update.log` — проверка и установка обновления.
+- `updates` — скачанный установщик и PowerShell-скрипт обновления.
+- `update.request` — временный запрос на обновление, создаётся приложением.
 
-Демка не отправляется на сервер. Наружу передаются только никнеймы и названия команд для карточек HLTV/Liquipedia, как указано в интерфейсе.
+Демка не отправляется на сервер. Наружу передаются только никнеймы и названия команд для карточек HLTV/Liquipedia, как указано в интерфейсе. AI-тренер локальный; при подключении внешнего API отправляются только метрики и никнейм.
 
 ## Сборка
 
@@ -69,7 +73,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 3. Собирает `dist\Parsy\Parsy.exe` через `Parsy.spec`.
 4. Создаёт `dist\Parsy-Portable.zip`.
 5. Скачивает `vendor\MicrosoftEdgeWebView2Setup.exe`, если его нет.
-6. Собирает `dist\Parsy-Setup-1.0.0.exe` через Inno Setup.
+6. Собирает `dist\Parsy-Setup-1.1.0.exe` через Inno Setup.
+7. Создаёт `dist\SHA256SUMS.txt` для Setup и Portable.
 
 Полная сборка занимает примерно 6–10 минут.
 
@@ -122,17 +127,21 @@ py -m streamlit run app.py
 - При закрытии окна завершает дочерний процесс через `taskkill /PID ... /T /F`.
 - Второй запуск не создаёт второе окно: приложение пытается вывести на передний план уже запущенный Parsy.
 - `app.py` включён в сборку как файл данных, а не импортируется как модуль.
+- `advisor.py` и `updater.py` добавлены в `hiddenimports` в `Parsy.spec`.
+- Updater работает только в установленной копии: проверяет GitHub Releases, скачивает Setup, проверяет SHA-256 и запускает его после закрытия GUI. Portable получает ручную ссылку на релиз.
 
 ## Версия
 
 При выпуске новой версии изменить:
 
 1. `main.py` → `APP_VERSION`.
-2. `version_info.txt` → `filevers`, `prodvers`, строковые версии.
-3. `installer\Parsy.iss` → `#define MyAppVersion`.
-4. `VersionInfoVersion` в `installer\Parsy.iss`.
+2. `app.py` → fallback `APP_VERSION` (используется при запуске Streamlit без оболочки).
+3. `version_info.txt` → `filevers`, `prodvers`, строковые версии.
+4. `installer\Parsy.iss` → `#define MyAppVersion`.
+5. `VersionInfoVersion` в `installer\Parsy.iss`.
+6. `README.md`, `DESKTOP_BUILD.md`, `PUBLISH.md` и release notes.
 
-После этого выполнить `build.ps1`. Имя Setup-файла изменится автоматически.
+После этого выполнить `build.ps1`. Имя Setup-файла изменится автоматически. Для автообновления важны tag, имя и digest ассета в GitHub Release.
 
 ## Диагностика
 
@@ -152,7 +161,7 @@ py -m streamlit run app.py
 
 ### Антивирус
 
-Неподписанный PyInstaller EXE может вызвать ложное срабатывание. Для публикации стоит подписать `Parsy.exe` и Setup код-сертификатом.
+Неподписанный PyInstaller EXE может вызвать ложное срабатывание. Подпись пока не настроена; при раздаче стоит указать, что установщик не подписан.
 
 ### Ошибка `Failed to download the Microsoft Edge WebView2 bootstrapper`
 

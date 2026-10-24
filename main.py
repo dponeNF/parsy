@@ -16,8 +16,10 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+import updater
+
 APP_NAME = "Parsy"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 SERVER_FLAG = "--streamlit-server"
 IS_WINDOWS = os.name == "nt"
 CREATE_NO_WINDOW = 0x08000000 if IS_WINDOWS else 0
@@ -115,6 +117,8 @@ def _apply_environment() -> None:
     }
     for key, value in values.items():
         os.environ[key] = value
+    os.environ["PARSY_APP_VERSION"] = APP_VERSION
+    os.environ["PARSY_INSTALLED"] = "1" if updater.is_installed() else "0"
 
 
 def _free_port() -> int:
@@ -660,6 +664,35 @@ def _run_streamlit_server() -> int:
         return 5
 
 
+def _watch_update_requests(window: Any, stop_event: threading.Event) -> None:
+    if not getattr(sys, "frozen", False) or not updater.is_installed():
+        return
+    while not stop_event.wait(2.0):
+        request = updater.read_update_request()
+        if not request:
+            continue
+        try:
+            version = str(request.get("version") or "")
+            if not updater.is_newer(version, APP_VERSION):
+                updater.clear_update_request()
+                continue
+            installer = updater.validate_request(request)
+            updater.launch_update(installer, updater.installed_app_exe(), os.getpid())
+            _gui_log(f"update requested: {version} -> {installer}")
+            updater.clear_update_request()
+            stop_event.set()
+            try:
+                window.destroy()
+            except Exception:
+                _gui_log(traceback.format_exc())
+                _shutdown_server()
+                os._exit(0)
+            return
+        except Exception:
+            _gui_log(traceback.format_exc())
+            updater.clear_update_request()
+
+
 def _run_desktop() -> int:
     _apply_environment()
     _ensure_data_dirs()
@@ -702,6 +735,12 @@ def _run_desktop() -> int:
         if window is None:
             raise RuntimeError("pywebview не создал окно приложения.")
         window.events.closed += _on_window_closed
+        threading.Thread(
+            target=_watch_update_requests,
+            args=(window, _SHUTDOWN),
+            daemon=True,
+            name="parsy-updater",
+        ).start()
         webview.start(
             _boot,
             args=(window, _SHUTDOWN),

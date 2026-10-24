@@ -20,6 +20,8 @@ hiddenimports = [
     "streamlit.web.bootstrap",
     "clr",
     "pythonnet",
+    "advisor",
+    "updater",
 ]
 
 for package in ("streamlit", "demoparser2", "plotly"):

@@ -98,4 +98,12 @@ $Installer = Get-ChildItem -LiteralPath $Dist -Filter "Parsy-Setup-*.exe" |
     Select-Object -First 1
 if ($Installer) {
     Write-Host "Installer: $($Installer.FullName)"
+    $ChecksumTargets = @($Installer, (Get-Item -LiteralPath $Zip))
+    $ChecksumLines = foreach ($Artifact in $ChecksumTargets) {
+        $Hash = (Get-FileHash -LiteralPath $Artifact.FullName -Algorithm SHA256).Hash
+        "$Hash  $($Artifact.Name)"
+    }
+    $Checksums = Join-Path $Dist "SHA256SUMS.txt"
+    Set-Content -LiteralPath $Checksums -Value $ChecksumLines -Encoding ASCII
+    Write-Host "Checksums: $Checksums"
 }

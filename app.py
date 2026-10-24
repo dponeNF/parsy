@@ -28,6 +28,9 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit import config as streamlit_config
 
+import advisor
+import updater
+
 try:
     from demoparser2 import DemoParser
 except Exception:
@@ -36,6 +39,8 @@ except Exception:
 
 MAX_UPLOAD_MB = 500
 DEMO_CACHE_VERSION = 2
+APP_VERSION = os.environ.get("PARSY_APP_VERSION", "1.1.0")
+IS_INSTALLED = os.environ.get("PARSY_INSTALLED") == "1"
 
 try:
     streamlit_config.set_option("server.maxUploadSize", MAX_UPLOAD_MB)
@@ -1754,6 +1759,248 @@ div[data-testid="stVerticalBlockBorderWrapper"] > div {
     text-align: center;
 }
 
+.ai-summary {
+    margin: 0.7rem 0 1.2rem 0;
+    padding: 1.15rem 1.2rem;
+    border: 1px solid rgba(194, 168, 120, 0.32);
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(194, 168, 120, 0.08), rgba(19, 20, 22, 0.96) 58%);
+}
+
+.ai-summary-label,
+.ai-panel-title,
+.ai-day-title {
+    color: #C2A878;
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.ai-summary-text {
+    margin-top: 0.45rem;
+    color: #EDEAE3;
+    font-size: 0.92rem;
+    line-height: 1.65;
+}
+
+.ai-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0.65rem 0 1.35rem 0;
+}
+
+.ai-panel {
+    padding: 1rem 1.05rem;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+}
+
+.ai-list {
+    display: grid;
+    gap: 0.62rem;
+    margin-top: 0.7rem;
+}
+
+.ai-item {
+    padding-top: 0.6rem;
+    border-top: 1px solid #202125;
+}
+
+.ai-item:first-child {
+    padding-top: 0;
+    border-top: 0;
+}
+
+.ai-item-title {
+    color: #D8D4CA;
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.ai-item-text {
+    margin-top: 0.22rem;
+    color: #8F8C85;
+    font-size: 0.68rem;
+    line-height: 1.55;
+}
+
+.ai-tag {
+    display: inline-block;
+    margin-top: 0.38rem;
+    padding: 0.16rem 0.42rem;
+    border: 1px solid rgba(194, 168, 120, 0.25);
+    border-radius: 4px;
+    color: #C2A878;
+    background: rgba(194, 168, 120, 0.06);
+    font-size: 0.58rem;
+    line-height: 1.35;
+}
+
+.ai-maps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0.65rem 0 1.35rem 0;
+}
+
+.ai-map {
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+}
+
+.ai-map-name {
+    color: #EDEAE3;
+    font-size: 0.95rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+}
+
+.ai-map-why {
+    margin-top: 0.35rem;
+    color: #8F8C85;
+    font-size: 0.68rem;
+    line-height: 1.55;
+}
+
+.ai-map-drills {
+    margin: 0.6rem 0 0 0;
+    padding: 0;
+    list-style: none;
+    color: #B8B3A8;
+    font-size: 0.66rem;
+    line-height: 1.55;
+}
+
+.ai-map-drills li {
+    position: relative;
+    padding-left: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.ai-map-drills li::before {
+    content: "";
+    position: absolute;
+    top: 0.48rem;
+    left: 0;
+    width: 3px;
+    height: 3px;
+    border-radius: 1px;
+    background: #C2A878;
+}
+
+.ai-week {
+    display: grid;
+    gap: 8px;
+    margin: 0.65rem 0 1.35rem 0;
+}
+
+.ai-day {
+    display: grid;
+    grid-template-columns: 110px minmax(0, 1fr);
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--surface);
+}
+
+.ai-day-head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.ai-day-meta {
+    color: #6F6D68;
+    font-size: 0.62rem;
+}
+
+.ai-tasks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: #A5A29B;
+    font-size: 0.68rem;
+    line-height: 1.5;
+}
+
+.ai-tasks li {
+    position: relative;
+    padding-left: 0.65rem;
+}
+
+.ai-tasks li::before {
+    content: "";
+    position: absolute;
+    top: 0.48rem;
+    left: 0;
+    width: 3px;
+    height: 3px;
+    border-radius: 1px;
+    background: #8FA2A6;
+}
+
+.ai-result {
+    margin-top: 0.8rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid #2A2B2E;
+    border-radius: 9px;
+    background: #111214;
+    color: #D8D4CA;
+    font-size: 0.8rem;
+    line-height: 1.7;
+}
+
+.update-card {
+    padding: 0.68rem 0.72rem;
+    border: 1px solid #242529;
+    border-radius: 8px;
+    background: #121315;
+}
+
+.update-version {
+    color: #D8D4CA;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.update-note {
+    margin-top: 0.2rem;
+    color: #6F6D68;
+    font-size: 0.62rem;
+    line-height: 1.45;
+}
+
+.stButton > button {
+    min-height: 36px;
+    border: 1px solid #2E2F33 !important;
+    border-radius: 7px !important;
+    background: #17181A !important;
+    color: #D8D4CA !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+}
+
+.stButton > button:hover {
+    border-color: #4A4B50 !important;
+    background: #1D1E21 !important;
+    color: #EDEAE3 !important;
+}
+
+.stButton > button:focus-visible {
+    outline: 1px solid #C2A878 !important;
+    outline-offset: 2px;
+}
+
 div[data-testid="stAlert"] {
     background: #141517 !important;
     border: 1px solid #2A2B2E !important;
@@ -1828,6 +2075,10 @@ details {
         grid-template-columns: 1fr;
     }
     .glossary-grid {
+        grid-template-columns: 1fr;
+    }
+    .ai-columns,
+    .ai-maps {
         grid-template-columns: 1fr;
     }
     .match-strip {
@@ -1933,6 +2184,10 @@ details {
     .upload-copy {
         flex-direction: column;
         gap: 0.2rem;
+    }
+    .ai-day {
+        grid-template-columns: 1fr;
+        gap: 0.45rem;
     }
 }
 </style>
@@ -4422,6 +4677,247 @@ def _clutches_tab(report: dict[str, Any]) -> None:
             )
 
 
+def _ai_tab(
+    report: dict[str, Any],
+    demo: DemoData,
+    groups: list[dict[str, Any]],
+    sid: str,
+    cache_key: str,
+) -> None:
+    player_name = _text(report.get("name"))
+    map_name = demo.match_label()
+    local = advisor.build_local_plan(report, demo, groups, sid, map_name)
+
+    _section(
+        "AI-тренер",
+        "Локальный разбор статистики и план тренировок. Для дополнительного текстового "
+        "разбора можно подключить локальную модель или OpenAI-совместимый API.",
+    )
+    _render_html(
+        f"""
+        <div class="ai-summary">
+            <div class="ai-summary-label">Главный вывод</div>
+            <div class="ai-summary-text">{_e(local["summary"])}</div>
+        </div>
+        """
+    )
+
+    strengths_html = "".join(
+        f'<div class="ai-item"><div class="ai-item-text">{_e(item)}</div></div>'
+        for item in local["strengths"]
+    )
+    weaknesses_html = "".join(
+        f"""
+        <div class="ai-item">
+            <div class="ai-item-title">{_e(item["title"])}</div>
+            <div class="ai-item-text">{_e(item["detail"])}</div>
+            <div class="ai-tag">{_e(item["target"])}</div>
+            <div class="ai-item-text">{_e(item["drill"])}</div>
+        </div>
+        """
+        for item in local["weaknesses"]
+    ) or '<div class="ai-item"><div class="ai-item-text">Явных провалов нет. Работай над стабильностью и усложняй тренировки.</div></div>'
+    _render_html(
+        f"""
+        <div class="ai-columns">
+            <div class="ai-panel">
+                <div class="ai-panel-title">Сильные стороны</div>
+                <div class="ai-list">{strengths_html}</div>
+            </div>
+            <div class="ai-panel">
+                <div class="ai-panel-title">Что подкачать</div>
+                <div class="ai-list">{weaknesses_html}</div>
+            </div>
+        </div>
+        """
+    )
+
+    map_html = "".join(
+        f"""
+        <div class="ai-map">
+            <div class="ai-map-name">{_e(item["name"])}{" · текущая" if item.get("current") else ""}</div>
+            <div class="ai-map-why">{_e(item["why"])}</div>
+            <ul class="ai-map-drills">
+                {''.join(f'<li>{_e(drill)}</li>' for drill in item["drills"])}
+            </ul>
+        </div>
+        """
+        for item in local["maps"]
+    )
+    _section("Карты для тренировки", "Приоритет зависит от слабых метрик в этом матче.")
+    _render_html(f'<div class="ai-maps">{map_html}</div>')
+
+    week_html = "".join(
+        f"""
+        <div class="ai-day">
+            <div class="ai-day-head">
+                <div class="ai-day-title">{_e(item["day"])}</div>
+                <div class="ai-day-meta">{_e(item["title"])} · {item["minutes"]} мин</div>
+            </div>
+            <ul class="ai-tasks">
+                {''.join(f'<li>{_e(task)}</li>' for task in item["tasks"])}
+            </ul>
+        </div>
+        """
+        for item in local["week"]
+    )
+    _section("План на неделю", "Пять коротких сессий: аим, утилита, дуэли, карта и разбор.")
+    _render_html(f'<div class="ai-week">{week_html}</div>')
+
+    _section("Генеративный разбор", "Необязательно: локальный план уже готов. AI добавит текстовый разбор.")
+    with st.expander("Подключить AI-модель", expanded=False):
+        provider = st.selectbox(
+            "AI-движок",
+            list(advisor.AI_PRESETS),
+            index=0,
+            key=f"ai_provider_{cache_key}",
+        )
+        preset = advisor.AI_PRESETS[provider]
+        if provider == "Локальный анализ":
+            st.caption(
+                "Используется встроенный аналитический движок. Демка и статистика "
+                "никуда не отправляются."
+            )
+        else:
+            base_url = st.text_input(
+                "Base URL",
+                value=str(preset.get("base_url") or ""),
+                key=f"ai_base_{cache_key}_{provider}",
+                help="Например: http://127.0.0.1:11434/v1 или https://api.openai.com/v1",
+            )
+            model = st.text_input(
+                "Модель",
+                value=str(preset.get("model") or ""),
+                key=f"ai_model_{cache_key}_{provider}",
+                help="Точное имя модели в выбранном API.",
+            )
+            api_key = st.text_input(
+                "API-ключ",
+                type="password",
+                key=f"ai_key_{cache_key}_{provider}",
+                help="Ключ хранится только в текущей сессии Parsy. Для Ollama ключ не нужен.",
+            )
+            st.caption(
+                "Отправляются только рассчитанные метрики и никнейм. Демка не загружается. "
+                "Проверяй ответы AI: модель может ошибаться."
+            )
+            if st.button(
+                "Сгенерировать AI-разбор",
+                key=f"ai_generate_{cache_key}_{provider}",
+                use_container_width=True,
+            ):
+                settings = {
+                    "base_url": base_url,
+                    "model": model,
+                    "api_key": api_key,
+                }
+                result_key = f"ai_result_{cache_key}_{provider}"
+                try:
+                    with st.spinner("AI-тренер готовит разбор..."):
+                        text = advisor.generate_ai_advice(
+                            report,
+                            local,
+                            map_name,
+                            player_name,
+                            settings,
+                        )
+                    st.session_state[result_key] = text
+                except Exception as error:
+                    st.error(str(error))
+            result_key = f"ai_result_{cache_key}_{provider}"
+            if st.session_state.get(result_key):
+                with st.container(border=True):
+                    st.markdown(st.session_state[result_key])
+                if st.button(
+                    "Очистить AI-разбор",
+                    key=f"ai_clear_{cache_key}_{provider}",
+                    use_container_width=True,
+                ):
+                    st.session_state.pop(result_key, None)
+                    st.rerun()
+
+
+def _format_size(size: int) -> str:
+    value = float(size or 0)
+    for unit in ("Б", "КБ", "МБ", "ГБ"):
+        if value < 1024 or unit == "ГБ":
+            return f"{value:.1f} {unit}" if unit != "Б" else f"{int(value)} Б"
+        value /= 1024
+    return f"{value:.1f} ГБ"
+
+
+def _render_update_sidebar() -> None:
+    _render_html('<div class="sidebar-rule"></div>')
+    _render_html('<div class="sidebar-label">Обновление</div>')
+    _render_html(
+        f'<div class="update-card"><div class="update-version">Parsy {_e(APP_VERSION)}</div>'
+        f'<div class="update-note">{"Установленная версия" if IS_INSTALLED else "Portable / режим разработки"}</div></div>'
+    )
+    if not IS_INSTALLED:
+        _render_html(
+            '<div class="update-note">Автообновление доступно в установленной версии. '
+            "Portable-сборку обновляй заменой папки.</div>"
+        )
+
+    if st.button("Проверить обновления", key="check_updates", use_container_width=True):
+        with st.spinner("Проверяем GitHub..."):
+            try:
+                st.session_state["update_info"] = updater.check_latest(APP_VERSION)
+                st.session_state.pop("update_error", None)
+            except Exception as error:
+                st.session_state["update_info"] = None
+                st.session_state["update_error"] = str(error)
+
+    error = st.session_state.get("update_error")
+    if error:
+        st.error(error)
+    info = st.session_state.get("update_info")
+    if not info:
+        return
+    if not info.get("is_newer"):
+        st.caption("Установлена последняя версия.")
+        return
+
+    st.success(f"Доступна версия {info['version']}")
+    size = _format_size(int(info.get("asset", {}).get("size") or 0))
+    st.caption(f"Установщик · {size}")
+    if info.get("notes"):
+        with st.expander("Что нового"):
+            st.markdown(info["notes"])
+    if not IS_INSTALLED:
+        if info.get("html_url"):
+            st.markdown(f"[Скачать с GitHub]({info['html_url']})")
+        return
+    if st.button("Скачать и обновить", key="download_update", use_container_width=True):
+        progress = st.progress(0.0, text="Скачивание установщика...")
+
+        def on_progress(done: int, total: int) -> None:
+            if total:
+                ratio = min(max(done / total, 0.0), 1.0)
+                progress.progress(ratio, text=f"Скачивание установщика... {ratio * 100:.0f}%")
+            else:
+                progress.progress(0.5, text="Скачивание установщика...")
+
+        try:
+            installer = updater.download_installer(info, on_progress)
+            updater.write_update_request(
+                installer,
+                str(info["version"]),
+                str(info.get("asset", {}).get("sha256") or ""),
+            )
+            progress.progress(1.0, text="Установщик готов")
+            st.success(
+                "Обновление скачано. Parsy сейчас закроется, установит новую версию "
+                "и запустится снова."
+            )
+            st.caption(
+                "Если окно не закрылось автоматически, закрой Parsy вручную: "
+                "установка начнётся после завершения приложения."
+            )
+        except Exception as error:
+            st.error(str(error))
+
+
 def _render_sidebar_brand() -> None:
     _render_html(
         """
@@ -4509,6 +5005,7 @@ def main() -> None:
             '<div class="sidebar-note">.dem до 500 МБ. Файл разбирается локально; '
             "для про-профилей отправляются только никнеймы и названия команд.</div>"
         )
+        _render_update_sidebar()
 
     if uploaded is None:
         _render_html(
@@ -4651,8 +5148,8 @@ def main() -> None:
             st.code(analysis_error or "Не удалось рассчитать ни одного игрока.")
         return
 
-    general, player_tab, combat, utility, clutches = st.tabs(
-        ["Общий", "Игрок", "Бой", "Утилиты", "Клатчи"]
+    general, player_tab, combat, utility, clutches, ai_tab = st.tabs(
+        ["Общий", "Игрок", "Бой", "Утилиты", "Клатчи", "AI-тренер"]
     )
 
     with general:
@@ -4677,6 +5174,9 @@ def main() -> None:
 
     with clutches:
         _clutches_tab(report)
+
+    with ai_tab:
+        _ai_tab(report, demo, groups, sid, f"{signature[0]}_{signature[1]}_{sid}")
 
     _render_html(
         '<div class="footer-note">Parsy · локальный разбор демки · '
