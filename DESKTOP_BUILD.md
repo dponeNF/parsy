@@ -6,7 +6,7 @@ Parsy — локальное Windows-приложение для разбора 
 
 После сборки результаты лежат в `dist`:
 
-- `Parsy-Setup-1.1.0.exe` — установщик для игроков.
+- `Parsy-Setup-1.2.0.exe` — установщик для игроков.
 - `Parsy-Portable.zip` — Portable-версия, которую нужно полностью распаковать.
 - `Parsy\Parsy.exe` — распакованная Portable-папка.
 - `SHA256SUMS.txt` — контрольные суммы артефактов.
@@ -21,7 +21,7 @@ Parsy — локальное Windows-приложение для разбора 
 
 ### Установщик
 
-1. Запустить `Parsy-Setup-1.1.0.exe`.
+1. Запустить `Parsy-Setup-1.2.0.exe`.
 2. Если Windows SmartScreen покажет предупреждение, нажать «Подробнее» → «Выполнить в любом случае». Установщик пока не подписан сертификатом.
 3. Пройти установку. Права администратора не нужны: приложение ставится в `%LOCALAPPDATA%\Programs\Parsy`.
 4. Запустить Parsy из меню «Пуск» или с рабочего стола.
@@ -73,7 +73,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 3. Собирает `dist\Parsy\Parsy.exe` через `Parsy.spec`.
 4. Создаёт `dist\Parsy-Portable.zip`.
 5. Скачивает `vendor\MicrosoftEdgeWebView2Setup.exe`, если его нет.
-6. Собирает `dist\Parsy-Setup-1.1.0.exe` через Inno Setup.
+6. Собирает `dist\Parsy-Setup-1.2.0.exe` через Inno Setup.
 7. Создаёт `dist\SHA256SUMS.txt` для Setup и Portable.
 
 Полная сборка занимает примерно 6–10 минут.

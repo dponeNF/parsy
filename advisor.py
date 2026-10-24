@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from typing import Any, Callable
@@ -612,7 +613,13 @@ def build_local_plan(
     weaknesses, strengths = _metric_findings(report)
     group = _find_group(groups, sid) or {}
     score = int(_number(group.get("score"), 0.0))
-    total_rounds = len(getattr(demo, "rounds", []) or [])
+    score_total = sum(
+        int(_number(item.get("score"), 0.0))
+        for item in (groups or [])[:2]
+    )
+    total_rounds = score_total or len(getattr(demo, "round_winners", {}) or {})
+    if total_rounds <= 0:
+        total_rounds = len(getattr(demo, "rounds", []) or [])
     side = _side_record(demo, sid)
     clutch = _clutch_summary(report)
     rounds = _rounds(report)
@@ -830,3 +837,181 @@ def generate_ai_advice(
     settings: dict[str, Any],
 ) -> str:
     return call_ai(settings, build_prompt(report, local, map_name, player_name))
+
+
+def build_chat_context(
+    report: dict[str, Any],
+    local: dict[str, Any],
+    map_name: str,
+    player_name: str,
+    rounds: list[dict[str, Any]] | None = None,
+) -> str:
+    stats = (
+        f"Игрок: {player_name or 'игрок'}\n"
+        f"Карта: {map_name or 'неизвестна'}\n"
+        f"Счёт: {local.get('score', 0)}:{local.get('total_rounds', 0) - local.get('score', 0)}\n"
+        f"Раунды: {report.get('rounds', 0)}\n"
+        f"K/D: {_number(report.get('kd')):.2f} ({report.get('kills', 0)} K / {report.get('deaths', 0)} D)\n"
+        f"ADR: {_number(report.get('adr')):.1f}\n"
+        f"KAST: {_number(report.get('kast')):.1f}%\n"
+        f"HS: {_number(report.get('hs_pct')):.1f}%\n"
+        f"Entry: {report.get('entry_kills', 0)} / {report.get('entry_deaths', 0)}\n"
+        f"Урон утилитой: {_number(report.get('utility_damage')):.0f}\n"
+        f"Флешки: {report.get('effective_flashes', 0)} эффективных из {report.get('flash_throws', 0)}\n"
+        f"Тимфлеши: {report.get('team_flashes', 0)}\n"
+        f"Трейды: {report.get('traded', 0)}\n"
+    )
+    weaknesses = "\n".join(
+        f"- {item['title']}: {item['detail']} Цель: {item['target']}."
+        for item in local.get("weaknesses", [])
+    ) or "- Явных провалов нет."
+    plans = "\n".join(
+        f"- {item['day']}, {item['title']}: {'; '.join(item['tasks'])}"
+        for item in local.get("week", [])
+    )
+    round_lines = []
+    for item in (rounds or [])[:24]:
+        tags = ", ".join(item.get("tags", [])) or "без тегов"
+        round_lines.append(
+            f"R{item.get('round')}: {item.get('side')} {item.get('result')} "
+            f"{item.get('score')}, {item.get('kills')}K/{item.get('deaths')}D, "
+            f"{item.get('damage', 0):.0f} dmg, теги: {tags}, "
+            f"первая дуэль: {item.get('first_duel') or '—'}."
+        )
+    return (
+        f"Статистика:\n{stats}\n"
+        f"Слабые стороны:\n{weaknesses}\n"
+        f"План:\n{plans}\n"
+        f"Раунды:\n" + "\n".join(round_lines)
+    )
+
+
+def local_chat_answer(
+    question: str,
+    report: dict[str, Any],
+    local: dict[str, Any],
+    map_name: str,
+    player_name: str,
+    rounds: list[dict[str, Any]] | None = None,
+) -> str:
+    text = (question or "").strip()
+    lowered = text.lower()
+    round_match = re.search(r"(?:раунд|round|r)\s*#?\s*(\d{1,2})", lowered)
+    if round_match:
+        number = int(round_match.group(1))
+        item = next((row for row in (rounds or []) if int(row.get("round", 0)) == number), None)
+        if not item:
+            return f"Раунда {number} нет в разобранной демке или он не был сыгран игроком."
+        tags = ", ".join(item.get("tags", [])) or "без тегов"
+        clutch = item.get("clutch") or {}
+        clutch_text = ""
+        if clutch:
+            clutch_text = (
+                f" Клатч 1v{clutch.get('enemies')}: "
+                f"{'выигран' if clutch.get('won') else 'проигран'}."
+            )
+        return (
+            f"Раунд {number}: {item.get('side')} · {item.get('result')} "
+            f"({item.get('score')}).\n"
+            f"K/D/A: {item.get('kills')}/{item.get('deaths')}/{item.get('assists')}, "
+            f"урон {item.get('damage', 0):.0f}.\n"
+            f"Первая дуэль: {item.get('first_duel') or 'не зафиксирована'}.\n"
+            f"Теги: {tags}.{clutch_text}\n"
+            f"Ключевой вывод: {local.get('summary', '')}"
+        )
+    if any(word in lowered for word in ("почему", "проигр", "результат", "счет", "счёт")):
+        weaknesses = local.get("weaknesses", [])
+        focus = "; ".join(item["title"].lower() for item in weaknesses[:3])
+        return (
+            f"{local.get('summary', '')}\n\n"
+            f"Главные причины: {focus or 'выраженных провалов нет'}. "
+            f"Смотри раунды с тегами entry loss, no plant/no defuse, teamflash и low damage."
+        )
+    if any(word in lowered for word in ("тренир", "план", "что делать", "улучш", "недел")):
+        lines = [
+            f"{item['day']}: {item['title']} ({item['minutes']} мин) — {'; '.join(item['tasks'])}"
+            for item in local.get("week", [])
+        ]
+        return "План на неделю:\n" + "\n".join(lines)
+    if any(word in lowered for word in ("карта", "карты", "map")):
+        lines = [
+            f"{item['name']}: {item['why']} Упражнения: {'; '.join(item['drills'])}"
+            for item in local.get("maps", [])
+        ]
+        return f"Текущая карта: {map_name}.\n" + "\n".join(lines)
+    if any(word in lowered for word in ("клатч", "1v")):
+        clutches = report.get("clutches") or {}
+        won = sum(int(_number((clutches.get(size) or {}).get("won"))) for size in (1, 2, 3))
+        lost = sum(int(_number((clutches.get(size) or {}).get("lost"))) for size in (1, 2, 3))
+        return (
+            f"Клатчи: {won}W–{lost}L. "
+            f"В раундах с клатчем смотри теги clutch win/clutch loss: "
+            f"важнее не количество, а решение перед первым контактом."
+        )
+    if any(word in lowered for word in ("аим", "стрель", "hs", "хедшот", "aim")):
+        return (
+            f"HS%: {_number(report.get('hs_pct')):.1f}%, K/D {_number(report.get('kd')):.2f}. "
+            "Фокус: 20 минут Aim Botz на тапы и спреи, затем 15 минут DM с первой пулей в голову. "
+            "Не тренируй аим отдельно от выхода: цель — выигрывать первый контакт."
+        )
+    if any(word in lowered for word in ("утилит", "флеш", "гранат", "смок")):
+        return (
+            f"Урон утилитой: {_number(report.get('utility_damage')):.0f}, "
+            f"эффективных флешек: {report.get('effective_flashes', 0)}, "
+            f"тимфлешей: {report.get('team_flashes', 0)}. "
+            "Сначала убери тимфлеши, затем добавь 3 смока и 2 молотова под текущую карту."
+        )
+    if any(word in lowered for word in ("смерт", "умира", "позиц")):
+        return (
+            f"Смертей: {report.get('deaths', 0)} за {report.get('rounds', 0)} раундов. "
+            f"В истории раундов ищи теги entry loss, no defuse и low damage. "
+            f"Смотри карту активности: красные крестики — твои смерти."
+        )
+    if any(word in lowered for word in ("сильн", "хорош", "плюс")):
+        return "Сильные стороны: " + "; ".join(local.get("strengths", []))
+    if any(word in lowered for word in ("раунд", "демк", "разбор")):
+        return (
+            f"{local.get('summary', '')}\n\n"
+            "Можно спросить конкретнее: «разбери раунд 5», «почему проиграли», "
+            "«что тренировать», «где я умираю»."
+        )
+    return (
+        f"{local.get('summary', '')}\n\n"
+        f"Приоритеты: {'; '.join(item['title'] for item in local.get('weaknesses', [])[:3]) or 'стабильность'}. "
+        "Спроси про конкретный раунд, карту или метрику — отвечу по данным этой демки."
+    )
+
+
+def chat_with_ai(
+    question: str,
+    report: dict[str, Any],
+    local: dict[str, Any],
+    map_name: str,
+    player_name: str,
+    rounds: list[dict[str, Any]] | None,
+    history: list[dict[str, str]] | None,
+    settings: dict[str, Any],
+) -> str:
+    context = build_chat_context(report, local, map_name, player_name, rounds)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Ты тренер по CS2 и аналитик демок. Отвечай по-русски, кратко и конкретно. "
+                "Опирайся только на переданный контекст. Если данных нет, скажи об этом. "
+                "Не выдумывай раунды, цифры и факты. Не советуй читы и запрещённое ПО."
+            ),
+        }
+    ]
+    for item in (history or [])[-6:]:
+        role = item.get("role")
+        content = item.get("content")
+        if role in {"user", "assistant"} and content:
+            messages.append({"role": role, "content": str(content)[:2500]})
+    messages.append(
+        {
+            "role": "user",
+            "content": f"Контекст демки:\n{context}\n\nВопрос игрока: {question}",
+        }
+    )
+    return call_ai(settings, messages, timeout=60.0)

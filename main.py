@@ -19,7 +19,7 @@ from typing import Any
 import updater
 
 APP_NAME = "Parsy"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 SERVER_FLAG = "--streamlit-server"
 IS_WINDOWS = os.name == "nt"
 CREATE_NO_WINDOW = 0x08000000 if IS_WINDOWS else 0

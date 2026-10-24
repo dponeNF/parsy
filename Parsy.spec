@@ -21,6 +21,7 @@ hiddenimports = [
     "clr",
     "pythonnet",
     "advisor",
+    "history",
     "updater",
 ]
 

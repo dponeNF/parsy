@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import bisect
 import gzip
+import hashlib
 import html
 import json
 import math
@@ -21,6 +22,8 @@ import traceback
 import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -29,6 +32,7 @@ import streamlit as st
 from streamlit import config as streamlit_config
 
 import advisor
+import history
 import updater
 
 try:
@@ -38,8 +42,8 @@ except Exception:
 
 
 MAX_UPLOAD_MB = 500
-DEMO_CACHE_VERSION = 2
-APP_VERSION = os.environ.get("PARSY_APP_VERSION", "1.1.0")
+DEMO_CACHE_VERSION = 3
+APP_VERSION = os.environ.get("PARSY_APP_VERSION", "1.2.0")
 IS_INSTALLED = os.environ.get("PARSY_INSTALLED") == "1"
 
 try:
@@ -1959,6 +1963,325 @@ div[data-testid="stVerticalBlockBorderWrapper"] > div {
     line-height: 1.7;
 }
 
+.round-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 0.7rem;
+}
+
+.round-row {
+    display: grid;
+    grid-template-columns: 54px 42px minmax(0, 1fr) 64px;
+    gap: 0.7rem;
+    align-items: start;
+    padding: 0.78rem 0.9rem;
+    border: 1px solid #242529;
+    border-left: 2px solid #4B4C50;
+    border-radius: 9px;
+    background: #111214;
+}
+
+.round-row.win {
+    border-left-color: #8FAF92;
+}
+
+.round-row.loss {
+    border-left-color: #A66B5F;
+}
+
+.round-index {
+    color: #C2A878;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.round-side {
+    padding: 0.12rem 0.3rem;
+    border: 1px solid #2A2B2E;
+    border-radius: 4px;
+    color: #8FA2A6;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.round-main {
+    min-width: 0;
+}
+
+.round-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.75rem;
+}
+
+.round-result {
+    color: #A5A29B;
+    font-size: 0.72rem;
+    font-weight: 650;
+}
+
+.round-result.win {
+    color: #A5C0A7;
+}
+
+.round-result.loss {
+    color: #C28A7D;
+}
+
+.round-score {
+    color: #EDEAE3;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.round-kd,
+.round-damage {
+    color: #8F8C85;
+    font-size: 0.64rem;
+}
+
+.round-duel {
+    margin-top: 0.25rem;
+    overflow: hidden;
+    color: #B8B3A8;
+    font-size: 0.67rem;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.round-duel.entry-win {
+    color: #A5C0A7;
+}
+
+.round-duel.entry-loss {
+    color: #C28A7D;
+}
+
+.round-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.42rem;
+}
+
+.round-tag {
+    padding: 0.1rem 0.34rem;
+    border: 1px solid #2A2B2E;
+    border-radius: 4px;
+    color: #8F8C85;
+    background: #151618;
+    font-size: 0.56rem;
+    line-height: 1.3;
+}
+
+.round-tag.good {
+    border-color: rgba(143, 175, 146, 0.26);
+    color: #A5C0A7;
+    background: rgba(143, 175, 146, 0.06);
+}
+
+.round-tag.bad {
+    border-color: rgba(166, 107, 95, 0.28);
+    color: #C28A7D;
+    background: rgba(166, 107, 95, 0.06);
+}
+
+.round-tag.warn {
+    border-color: rgba(194, 168, 120, 0.26);
+    color: #C2A878;
+    background: rgba(194, 168, 120, 0.06);
+}
+
+.round-team {
+    color: #6F6D68;
+    font-size: 0.64rem;
+    text-align: right;
+}
+
+.team-roster {
+    display: grid;
+    gap: 6px;
+    margin-top: 0.7rem;
+}
+
+.team-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 1.4fr) 80px repeat(5, minmax(54px, 0.7fr));
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.56rem 0.68rem;
+    border: 1px solid #222327;
+    border-radius: 7px;
+    background: #121315;
+    font-size: 0.66rem;
+}
+
+.team-row.head {
+    border-color: transparent;
+    background: transparent;
+    color: #6F6D68;
+    font-size: 0.56rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.team-row .name {
+    color: #D8D4CA;
+    font-weight: 600;
+}
+
+.team-row .role {
+    color: #8FA2A6;
+    font-size: 0.57rem;
+}
+
+.team-row .good {
+    color: #A5C0A7;
+}
+
+.team-row .bad {
+    color: #C28A7D;
+}
+
+.history-list {
+    display: grid;
+    gap: 6px;
+    margin-top: 0.7rem;
+}
+
+.history-row {
+    display: grid;
+    grid-template-columns: 110px minmax(120px, 1fr) 74px 80px;
+    gap: 0.65rem;
+    align-items: center;
+    padding: 0.62rem 0.78rem;
+    border: 1px solid #222327;
+    border-radius: 8px;
+    background: #121315;
+    font-size: 0.66rem;
+}
+
+.history-date {
+    color: #6F6D68;
+}
+
+.history-map {
+    color: #D8D4CA;
+    font-weight: 600;
+}
+
+.history-score {
+    color: #C2A878;
+    font-weight: 700;
+}
+
+.history-table {
+    display: grid;
+    gap: 4px;
+    margin-top: 0.7rem;
+    overflow-x: auto;
+}
+
+.history-table-row {
+    display: grid;
+    grid-template-columns: 92px minmax(180px, 1fr) 58px 54px 54px 58px;
+    gap: 0.55rem;
+    align-items: center;
+    min-width: 560px;
+    padding: 0.56rem 0.68rem;
+    border: 1px solid #222327;
+    border-radius: 7px;
+    background: #121315;
+    color: #B8B3A8;
+    font-size: 0.65rem;
+}
+
+.history-table-row.head {
+    border-color: transparent;
+    background: transparent;
+    color: #6F6D68;
+    font-size: 0.55rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.history-table-row.current {
+    border-color: rgba(194, 168, 120, 0.32);
+    background: rgba(194, 168, 120, 0.045);
+}
+
+.history-file {
+    margin-top: 0.12rem;
+    overflow: hidden;
+    color: #6F6D68;
+    font-size: 0.56rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-current {
+    margin-left: 0.38rem;
+    padding: 0.05rem 0.26rem;
+    border: 1px solid rgba(194, 168, 120, 0.25);
+    border-radius: 3px;
+    color: #C2A878;
+    font-size: 0.5rem;
+    font-weight: 600;
+}
+
+.history-score.win {
+    color: #A5C0A7;
+}
+
+.history-score.loss {
+    color: #C28A7D;
+}
+
+.history-meta {
+    color: #8F8C85;
+    text-align: right;
+}
+
+.chat-log {
+    display: grid;
+    gap: 8px;
+    margin: 0.7rem 0;
+}
+
+.chat-msg {
+    max-width: 92%;
+    padding: 0.72rem 0.85rem;
+    border: 1px solid #25262A;
+    border-radius: 9px;
+    color: #C8C4BA;
+    background: #121315;
+    font-size: 0.72rem;
+    line-height: 1.62;
+    white-space: pre-wrap;
+}
+
+.chat-msg.user {
+    justify-self: end;
+    border-color: rgba(194, 168, 120, 0.25);
+    color: #E2DDD2;
+    background: rgba(194, 168, 120, 0.07);
+}
+
+.chat-msg.assistant {
+    justify-self: start;
+}
+
+.map-note {
+    margin-top: 0.5rem;
+    color: #6F6D68;
+    font-size: 0.62rem;
+    line-height: 1.5;
+}
+
 .update-card {
     padding: 0.68rem 0.72rem;
     border: 1px solid #242529;
@@ -2090,6 +2413,24 @@ details {
     .match-item:nth-child(-n+2) {
         border-bottom: 1px solid var(--line);
     }
+    .team-roster {
+        overflow-x: auto;
+    }
+    .team-row {
+        min-width: 620px;
+    }
+    .ai-day {
+        grid-template-columns: 1fr;
+    }
+    .round-row {
+        grid-template-columns: 44px 36px minmax(0, 1fr);
+    }
+    .round-team {
+        display: none;
+    }
+    .chat-msg {
+        max-width: 100%;
+    }
 }
 
 @media (max-width: 560px) {
@@ -2188,6 +2529,15 @@ details {
     .ai-day {
         grid-template-columns: 1fr;
         gap: 0.45rem;
+    }
+    .round-row {
+        grid-template-columns: 40px minmax(0, 1fr);
+    }
+    .round-side {
+        display: none;
+    }
+    .history-table-row {
+        min-width: 520px;
     }
 }
 </style>
@@ -2291,6 +2641,27 @@ def _find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
         if found is not None:
             return found
     return None
+
+
+def _site_label_map(values: list[Any]) -> dict[str, str]:
+    unique: list[str] = []
+    for value in values:
+        raw = _text(value)
+        if raw and raw not in unique:
+            unique.append(raw)
+
+    def sort_key(value: str) -> tuple[int, Any]:
+        try:
+            return (0, float(value))
+        except ValueError:
+            return (1, value)
+
+    ordered = sorted(unique, key=sort_key)
+    labels = ("A", "B")
+    return {
+        value: labels[index] if index < len(labels) else value
+        for index, value in enumerate(ordered)
+    }
 
 
 def _clean_event(df: Any, keep_warmup: bool = False) -> pd.DataFrame:
@@ -2415,7 +2786,12 @@ def _parse_demo_bytes(raw: bytes) -> "DemoData":
             player_info = pd.DataFrame()
 
         parsed = _parse_events(parser, list(EVENT_NAMES))
-        return DemoData(header, player_info, parsed)
+        demo = DemoData(header, player_info, parsed)
+        try:
+            demo.load_positions(parser)
+        except Exception:
+            demo.positions = pd.DataFrame()
+        return demo
     finally:
         try:
             os.unlink(path)
@@ -2449,12 +2825,16 @@ class DemoData:
         self._start_ticks = pd.DataFrame(columns=["tick", "round"])
         self._all_sids: set[str] = set()
         self.players: list[dict[str, str]] = []
+        self.positions = pd.DataFrame()
+        self.bomb_plants: list[dict[str, Any]] = []
+        self._position_series: dict[str, tuple[list[float], list[float], list[float]]] = {}
 
         self._prep_events()
         self._prepare_players(player_info)
         self._assign_rounds()
         self._build_timelines()
         self._build_round_info()
+        self._drop_unscored_rounds()
         self.tick_rate = self._find_tick_rate()
 
         if not self.players:
@@ -2741,6 +3121,24 @@ class DemoData:
                 self.round_winners[round_number] = winner
         self.round_info = pd.DataFrame(rows)
 
+    def _drop_unscored_rounds(self) -> None:
+        if not self.round_winners:
+            return
+        valid = set(self.round_winners)
+        self.rounds = [round_number for round_number in self.rounds if round_number in valid]
+        if not self.round_info.empty:
+            self.round_info = self.round_info[
+                self.round_info["round"].isin(valid)
+            ].reset_index(drop=True)
+        if not self._start_ticks.empty:
+            self._start_ticks = self._start_ticks[
+                self._start_ticks["round"].isin(valid)
+            ].reset_index(drop=True)
+        for name, frame in list(self.events.items()):
+            if frame.empty or "round" not in frame.columns:
+                continue
+            self.events[name] = frame[frame["round"].isin(valid)].reset_index(drop=True)
+
     def _find_tick_rate(self) -> float:
         for key, value in self.header.items():
             lowered = str(key).lower()
@@ -2793,6 +3191,168 @@ class DemoData:
             name = name[3:]
         return name.replace("_", " ").title()
 
+    def load_positions(self, parser: Any) -> None:
+        if self.round_info.empty:
+            self.positions = pd.DataFrame()
+            return
+        sample_ticks: set[int] = set()
+        step = max(int(self.tick_rate * 2.0), 32)
+        for row in self.round_info.itertuples(index=False):
+            start = _num(getattr(row, "start_tick", None), -1.0)
+            end = _num(getattr(row, "end_tick", None), -1.0)
+            if start < 0:
+                continue
+            if end < start:
+                end = start + self.tick_rate * 125.0
+            begin = int(start)
+            stop = int(min(end, start + self.tick_rate * 140.0))
+            for tick in range(begin, max(stop, begin + 1), step):
+                sample_ticks.add(tick)
+            sample_ticks.add(begin)
+            if end >= start:
+                sample_ticks.add(int(end))
+        for event_name in ("player_death", "bomb_planted", "bomb_defused", "bomb_exploded"):
+            frame = self.events.get(event_name, pd.DataFrame())
+            if frame.empty or "tick" not in frame.columns:
+                continue
+            values = pd.to_numeric(frame["tick"], errors="coerce").dropna()
+            for value in values.tolist():
+                sample_ticks.add(int(value))
+        if not sample_ticks:
+            self.positions = pd.DataFrame()
+            return
+        ticks = sorted(sample_ticks)[:3000]
+        frame = parser.parse_ticks(
+            ["X", "Y", "health", "is_alive", "team_num"],
+            ticks=ticks,
+        )
+        if not isinstance(frame, pd.DataFrame) or frame.empty:
+            self.positions = pd.DataFrame()
+            return
+        sid_column = _find_col(frame, ["steamid", "user_steamid", "player_steamid"])
+        x_column = _find_col(frame, ["X", "x", "pos_x", "position_x"])
+        y_column = _find_col(frame, ["Y", "y", "pos_y", "position_y"])
+        tick_column = _find_col(frame, ["tick"])
+        if not sid_column or not x_column or not y_column or not tick_column:
+            self.positions = pd.DataFrame()
+            return
+        alive_column = _find_col(frame, ["is_alive", "alive"])
+        health_column = _find_col(frame, ["health"])
+        team_column = _find_col(frame, ["team_num", "team_number", "team"])
+        name_column = _find_col(frame, ["name", "user_name", "player_name"])
+        working = pd.DataFrame(
+            {
+                "tick": pd.to_numeric(frame[tick_column], errors="coerce"),
+                "sid": frame[sid_column].map(_sid),
+                "x": pd.to_numeric(frame[x_column], errors="coerce"),
+                "y": pd.to_numeric(frame[y_column], errors="coerce"),
+                "alive": _bool_series(frame[alive_column])
+                if alive_column
+                else True,
+                "health": pd.to_numeric(frame[health_column], errors="coerce")
+                if health_column
+                else 100.0,
+                "team_num": frame[team_column].map(_text) if team_column else "",
+                "name": frame[name_column].map(_text) if name_column else "",
+            }
+        )
+        working = working.dropna(subset=["tick", "x", "y"])
+        working = working[
+            working["sid"].astype(bool)
+            & working["x"].abs().lt(20000)
+            & working["y"].abs().lt(20000)
+        ]
+        if working.empty:
+            self.positions = pd.DataFrame()
+            return
+        left = working[["tick"]].drop_duplicates().sort_values("tick")
+        right = self._start_ticks.dropna(subset=["tick"]).sort_values("tick")
+        if right.empty:
+            self.positions = pd.DataFrame()
+            return
+        mapped = pd.merge_asof(left, right, on="tick", direction="backward")
+        working = working.merge(mapped, on="tick", how="left")
+        working = working.dropna(subset=["round"])
+        working = working[working["round"] > 0].copy()
+        if working.empty:
+            self.positions = pd.DataFrame()
+            return
+        working["round"] = working["round"].astype(int)
+        working["tick"] = working["tick"].astype(int)
+        working["side"] = [
+            self.side_at(sid, tick)
+            for sid, tick in zip(working["sid"].tolist(), working["tick"].tolist())
+        ]
+        working = working.drop_duplicates(subset=["tick", "sid"])
+        working = working.sort_values(["round", "tick", "sid"]).reset_index(drop=True)
+        self.positions = working
+
+        for sid, group in working.groupby("sid", sort=False):
+            ordered = group.sort_values("tick")
+            self._position_series[str(sid)] = (
+                ordered["tick"].astype(float).tolist(),
+                ordered["x"].astype(float).tolist(),
+                ordered["y"].astype(float).tolist(),
+            )
+
+        plants = self.events.get("bomb_planted", pd.DataFrame())
+        if plants.empty:
+            return
+        site_column = _find_col(plants, ["site", "bombsite", "bomb_site"])
+        site_map = (
+            _site_label_map(plants[site_column].dropna().tolist())
+            if site_column
+            else {}
+        )
+        plants_list: list[dict[str, Any]] = []
+        for _, row in plants.iterrows():
+            sid = _sid(row.get("user_id"))
+            tick = _num(row.get("tick"), -1.0)
+            if not sid or tick < 0:
+                continue
+            position = self.position_at(sid, tick)
+            if not position:
+                continue
+            x, y = position
+            plants_list.append(
+                {
+                    "round": int(_num(row.get("round"), 0)),
+                    "tick": tick,
+                    "sid": sid,
+                    "name": self.player_names.get(sid, sid),
+                    "site": site_map.get(_text(row.get(site_column)), "")
+                    if site_column
+                    else "",
+                    "x": x,
+                    "y": y,
+                }
+            )
+        self.bomb_plants = plants_list
+
+    def position_at(self, sid: str, tick: Any) -> tuple[float, float] | None:
+        series = self._position_series.get(str(sid))
+        if not series:
+            return None
+        ticks, xs, ys = series
+        try:
+            value = float(tick)
+        except (TypeError, ValueError):
+            return None
+        if not ticks:
+            return None
+        index = bisect.bisect_left(ticks, value)
+        candidates = []
+        if index < len(ticks):
+            candidates.append(index)
+        if index > 0:
+            candidates.append(index - 1)
+        if not candidates:
+            return None
+        best = min(candidates, key=lambda item: abs(ticks[item] - value))
+        if abs(ticks[best] - value) > max(self.tick_rate * 1.5, 32.0):
+            return None
+        return (xs[best], ys[best])
+
 
 def _death_records(demo: DemoData) -> list[dict[str, Any]]:
     frame = demo.events.get("player_death", pd.DataFrame())
@@ -2823,13 +3383,19 @@ def _death_records(demo: DemoData) -> list[dict[str, Any]]:
 
 
 def _played_rounds(demo: DemoData, sid: str) -> list[int]:
+    completed = set(demo.rounds)
+    if not completed:
+        return []
     spawns = demo.events.get("player_spawn", pd.DataFrame())
-    if not spawns.empty and "user_id" in spawns.columns:
-        values = spawns.loc[spawns["user_id"] == sid, "round"].dropna()
-        rounds = sorted({int(value) for value in values})
-        if rounds:
-            return rounds
-    return list(demo.rounds)
+    if spawns.empty or "user_id" not in spawns.columns:
+        return sorted(completed)
+    spawn_rounds = {int(value) for value in spawns["round"].dropna()}
+    values = spawns.loc[spawns["user_id"] == sid, "round"].dropna()
+    played = {int(value) for value in values} & completed
+    played |= completed - spawn_rounds
+    if played:
+        return sorted(played)
+    return []
 
 
 def _player_options(demo: DemoData) -> list[tuple[str, str]]:
@@ -3526,6 +4092,7 @@ def analyze_player(demo: DemoData, sid: str) -> dict[str, Any]:
     utility_by_round: dict[int, dict[str, float]] = defaultdict(
         lambda: {"he": 0.0, "fire": 0.0}
     )
+    damage_by_round: dict[int, float] = defaultdict(float)
     if not hurt.empty and "attacker_id" in hurt.columns:
         for _, row in hurt.iterrows():
             if _sid(row.get("attacker_id")) != sid:
@@ -3539,9 +4106,11 @@ def analyze_player(demo: DemoData, sid: str) -> dict[str, Any]:
             if damage <= 0:
                 continue
             total_damage += damage
+            round_number = int(_num(row.get("round"), 0))
+            if round_number > 0:
+                damage_by_round[round_number] += damage
             kind = _utility_kind(_text(row.get("weapon_l")))
             if kind:
-                round_number = int(_num(row.get("round"), 0))
                 if round_number > 0:
                     utility_by_round[round_number][kind] += damage
                 if kind == "he":
@@ -3655,6 +4224,7 @@ def analyze_player(demo: DemoData, sid: str) -> dict[str, Any]:
         "he_damage": he_damage,
         "fire_damage": fire_damage,
         "utility_rows": utility_rows,
+        "damage_by_round": dict(damage_by_round),
         "flash_seconds": enemy_blind_seconds,
         "flash_events": enemy_blind_events,
         "effective_flashes": len(effective_flash_keys),
@@ -3668,6 +4238,456 @@ def analyze_player(demo: DemoData, sid: str) -> dict[str, Any]:
         "defuses": defuses,
         "explosions": explosions,
     }
+
+
+ROUND_TAG_LABELS = {
+    "entry": "entry win",
+    "entry_loss": "entry loss",
+    "trade": "trade",
+    "survived": "выжил",
+    "clutch_win": "клатч W",
+    "clutch_loss": "клатч L",
+    "teamflash": "тимфлеш",
+    "plant": "плент",
+    "defuse": "дифьюз",
+    "explode": "взрыв",
+    "no_plant": "без плента",
+    "no_defuse": "без дифьюза",
+    "low_damage": "мало урона",
+}
+
+ROUND_TAG_CLASSES = {
+    "entry": "good",
+    "entry_loss": "bad",
+    "trade": "good",
+    "survived": "good",
+    "clutch_win": "good",
+    "clutch_loss": "bad",
+    "teamflash": "bad",
+    "plant": "good",
+    "defuse": "good",
+    "explode": "good",
+    "no_plant": "bad",
+    "no_defuse": "bad",
+    "low_damage": "warn",
+}
+
+
+def _round_clutch_details(
+    demo: DemoData,
+    sid: str,
+    played_set: set[int],
+) -> dict[int, dict[str, Any]]:
+    details: dict[int, dict[str, Any]] = {}
+    all_players = {player["sid"] for player in demo.players}
+    spawns = demo.events.get("player_spawn", pd.DataFrame())
+    spawned_by_round: dict[int, set[str]] = defaultdict(set)
+    if not spawns.empty and "user_id" in spawns.columns:
+        for _, row in spawns.iterrows():
+            round_number = int(_num(row.get("round"), 0))
+            spawned_sid = _sid(row.get("user_id"))
+            if round_number > 0 and spawned_sid:
+                spawned_by_round[round_number].add(spawned_sid)
+    deaths_by_round: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for death in _death_records(demo):
+        deaths_by_round[death["round"]].append(death)
+
+    for round_number in sorted(played_set):
+        participants = set(spawned_by_round.get(round_number, set())) or set(all_players)
+        participants.add(sid)
+        round_deaths = sorted(deaths_by_round.get(round_number, []), key=lambda item: item["tick"])
+        for death in round_deaths:
+            if death["attacker"]:
+                participants.add(death["attacker"])
+            if death["victim"]:
+                participants.add(death["victim"])
+        alive = set(participants)
+        tick_groups: list[tuple[float, list[dict[str, Any]]]] = []
+        for death in round_deaths:
+            if not tick_groups or tick_groups[-1][0] != death["tick"]:
+                tick_groups.append((death["tick"], [death]))
+            else:
+                tick_groups[-1][1].append(death)
+        for tick, group in tick_groups:
+            for death in group:
+                alive.discard(death["victim"])
+            if sid not in alive:
+                break
+            side = demo.side_at(sid, tick)
+            if not side:
+                continue
+            teammates = 0
+            enemies = 0
+            for participant in alive:
+                participant_side = demo.side_at(participant, tick)
+                if not participant_side:
+                    continue
+                if participant_side == side:
+                    if participant != sid:
+                        teammates += 1
+                else:
+                    enemies += 1
+            if teammates == 0 and enemies > 0:
+                winner = demo.round_winners.get(round_number)
+                details[round_number] = {
+                    "enemies": enemies,
+                    "won": bool(winner and winner == side),
+                    "side": side,
+                }
+                break
+    return details
+
+
+def build_round_review(
+    demo: DemoData,
+    sid: str,
+    report: dict[str, Any],
+    group: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    played = set(_played_rounds(demo, sid)) or set(demo.rounds)
+    deaths = _death_records(demo)
+    deaths_by_round: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for death in deaths:
+        deaths_by_round[death["round"]].append(death)
+    for items in deaths_by_round.values():
+        items.sort(key=lambda item: item["tick"])
+    _, traded_rounds = _traded_deaths(deaths_by_round, demo, sid)
+    clutch_details = _round_clutch_details(demo, sid, played)
+    team_sids = {
+        str(player.get("sid") or "")
+        for player in (group or {}).get("players", [])
+        if player.get("sid")
+    }
+    if not team_sids:
+        side = demo.side_at(sid)
+        team_sids = {
+            player["sid"]
+            for player in demo.players
+            if demo.side_at(player["sid"]) == side
+        }
+    team_sids.add(sid)
+    damage_by_round = report.get("damage_by_round") or {}
+
+    team_flash_rounds: set[int] = set()
+    blind = demo.events.get("player_blind", pd.DataFrame())
+    if not blind.empty and "attacker_id" in blind.columns:
+        for _, row in blind.iterrows():
+            if _sid(row.get("attacker_id")) != sid:
+                continue
+            victim = _sid(row.get("user_id")) or _sid(row.get("victim_id"))
+            if not victim or victim == sid or victim not in team_sids:
+                continue
+            round_number = int(_num(row.get("round"), 0))
+            if round_number > 0:
+                team_flash_rounds.add(round_number)
+
+    plant_frame = demo.events.get("bomb_planted", pd.DataFrame())
+    defuse_frame = demo.events.get("bomb_defused", pd.DataFrame())
+    explode_frame = demo.events.get("bomb_exploded", pd.DataFrame())
+    site_column = _find_col(plant_frame, ["site", "bombsite", "bomb_site"])
+    site_map = (
+        _site_label_map(plant_frame[site_column].dropna().tolist())
+        if site_column
+        else {}
+    )
+    plants_by_round: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    if not plant_frame.empty and "user_id" in plant_frame.columns:
+        for _, row in plant_frame.iterrows():
+            round_number = int(_num(row.get("round"), 0))
+            planter = _sid(row.get("user_id"))
+            if round_number <= 0 or not planter:
+                continue
+            plants_by_round[round_number].append(
+                {
+                    "sid": planter,
+                    "name": demo.player_names.get(planter, planter),
+                    "site": site_map.get(_text(row.get(site_column)), "")
+                    if site_column
+                    else "",
+                }
+            )
+    defuses_by_round: dict[int, list[str]] = defaultdict(list)
+    if not defuse_frame.empty and "user_id" in defuse_frame.columns:
+        for _, row in defuse_frame.iterrows():
+            round_number = int(_num(row.get("round"), 0))
+            defuser = _sid(row.get("user_id"))
+            if round_number > 0 and defuser:
+                defuses_by_round[round_number].append(defuser)
+    explosions = set()
+    if not explode_frame.empty and "round" in explode_frame.columns:
+        explosions = {
+            int(_num(value, 0))
+            for value in explode_frame["round"].dropna().tolist()
+            if _num(value, 0) > 0
+        }
+
+    rows: list[dict[str, Any]] = []
+    team_score = 0
+    enemy_score = 0
+    for round_number in demo.rounds:
+        if round_number not in played:
+            continue
+        start_tick = None
+        winner = demo.round_winners.get(round_number)
+        if not demo.round_info.empty:
+            match = demo.round_info.loc[demo.round_info["round"] == round_number]
+            if not match.empty:
+                start_tick = match.iloc[0].get("start_tick")
+        side = demo.side_at(sid, start_tick) or ""
+        round_deaths = deaths_by_round.get(round_number, [])
+        player_kills = [
+            death
+            for death in round_deaths
+            if death["attacker"] == sid
+            and death["victim"]
+            and death["victim"] != sid
+            and not demo.is_teammate(sid, death["victim"], death["tick"])
+        ]
+        player_deaths = [death for death in round_deaths if death["victim"] == sid]
+        player_assists = [
+            death
+            for death in round_deaths
+            if death["assister"] == sid
+            and death["victim"]
+            and death["victim"] != sid
+            and not demo.is_teammate(sid, death["victim"], death["tick"])
+        ]
+        team_kills = 0
+        team_deaths = 0
+        for death in round_deaths:
+            attacker = death["attacker"]
+            victim = death["victim"]
+            if attacker in team_sids and victim and victim not in team_sids:
+                team_kills += 1
+            if victim in team_sids and attacker and attacker not in team_sids:
+                team_deaths += 1
+        first_duel = None
+        for death in round_deaths:
+            if not death["attacker"] or not death["victim"]:
+                continue
+            if death["attacker"] == death["victim"]:
+                continue
+            if demo.is_teammate(death["attacker"], death["victim"], death["tick"]):
+                continue
+            first_duel = death
+            break
+        won = bool(winner and side and winner == side)
+        if winner:
+            if won:
+                team_score += 1
+            else:
+                enemy_score += 1
+        round_plants = plants_by_round.get(round_number, [])
+        player_plant = next((item for item in round_plants if item["sid"] == sid), None)
+        team_plants = [item for item in round_plants if item["sid"] in team_sids]
+        round_defuses = defuses_by_round.get(round_number, [])
+        player_defuse = sid in round_defuses
+        team_defuse = any(defuser in team_sids for defuser in round_defuses)
+        clutch = clutch_details.get(round_number)
+        damage = float(_num(damage_by_round.get(round_number), 0.0))
+        tags: list[str] = []
+        if first_duel and first_duel["attacker"] == sid:
+            tags.append("entry")
+        if first_duel and first_duel["victim"] == sid:
+            tags.append("entry_loss")
+        kill_count = len(player_kills)
+        if kill_count == 5:
+            tags.append("ace")
+        elif kill_count >= 2:
+            tags.append(f"{kill_count}k")
+        if round_number in traded_rounds:
+            tags.append("trade")
+        if not player_deaths:
+            tags.append("survived")
+        if clutch:
+            tags.append("clutch_win" if clutch["won"] else "clutch_loss")
+        if round_number in team_flash_rounds:
+            tags.append("teamflash")
+        if player_plant:
+            tags.append("plant")
+        if player_defuse:
+            tags.append("defuse")
+        if round_number in explosions:
+            tags.append("explode")
+        if side == "T" and winner and not won and not team_plants:
+            tags.append("no_plant")
+        if side == "CT" and winner and not won and team_plants and not team_defuse:
+            tags.append("no_defuse")
+        if damage < 15 and round_number not in explosions:
+            tags.append("low_damage")
+        first_duel_text = ""
+        first_duel_tag = ""
+        if first_duel:
+            attacker_name = demo.player_names.get(first_duel["attacker"], first_duel["attacker"])
+            victim_name = demo.player_names.get(first_duel["victim"], first_duel["victim"])
+            weapon = _weapon_label(first_duel["weapon"])
+            first_duel_text = f"{attacker_name} → {victim_name} · {weapon}"
+            if first_duel["attacker"] == sid:
+                first_duel_tag = "выиграл"
+            elif first_duel["victim"] == sid:
+                first_duel_tag = "проиграл"
+        rows.append(
+            {
+                "round": round_number,
+                "side": side or "—",
+                "winner": winner or "—",
+                "won": won,
+                "result": "Победа" if won else "Поражение" if winner else "—",
+                "score": f"{team_score}:{enemy_score}",
+                "kills": kill_count,
+                "deaths": len(player_deaths),
+                "assists": len(player_assists),
+                "team_kills": team_kills,
+                "team_deaths": team_deaths,
+                "damage": damage,
+                "first_duel": first_duel_text,
+                "first_duel_tag": first_duel_tag,
+                "plant_site": (player_plant or {}).get("site", ""),
+                "clutch": clutch,
+                "tags": tags,
+            }
+        )
+    return rows
+
+
+def _round_tag_html(tag: str) -> str:
+    if tag.endswith("k") and tag[:-1].isdigit():
+        label = tag.upper()
+        css = "good"
+    elif tag == "ace":
+        label = "ACE"
+        css = "good"
+    else:
+        label = ROUND_TAG_LABELS.get(tag, tag)
+        css = ROUND_TAG_CLASSES.get(tag, "")
+    return f'<span class="round-tag {css}">{_e(label)}</span>'
+
+
+def _rounds_tab(
+    demo: DemoData,
+    sid: str,
+    report: dict[str, Any],
+    group: dict[str, Any] | None,
+    rows: list[dict[str, Any]] | None = None,
+) -> None:
+    rows = rows if rows is not None else build_round_review(demo, sid, report, group)
+    _section(
+        "Разбор раундов",
+        "Каждый раунд с результатом, первым дуэлем, уроном и автоматическими тегами.",
+    )
+    if not rows:
+        _empty_panel("Для этого игрока не удалось собрать раунды.")
+        return
+    wins = sum(1 for row in rows if row["won"])
+    losses = sum(1 for row in rows if row["winner"] != "—" and not row["won"])
+    entry_wins = sum(1 for row in rows if "entry" in row["tags"])
+    entry_losses = sum(1 for row in rows if "entry_loss" in row["tags"])
+    multi = sum(1 for row in rows if any(tag.endswith("k") for tag in row["tags"]))
+    clutch_wins = sum(1 for row in rows if "clutch_win" in row["tags"])
+    win_rate = wins / max(wins + losses, 1) * 100.0
+    _render_metric_grid(
+        [
+            _metric_card("Раунды", _format_number(len(rows)), f"{wins}W · {losses}L"),
+            _metric_card("Win Rate", f"{win_rate:.0f}%", "по завершённым раундам"),
+            _metric_card(
+                "Opening",
+                f"{entry_wins} / {entry_losses}",
+                "выиграно / проиграно первых дуэлей",
+            ),
+            _metric_card("Мультифраги", _format_number(multi), "раунды с 2+ киллами"),
+            _metric_card("Клатчи", _format_number(clutch_wins), "выигранные 1vX"),
+        ],
+        big=True,
+    )
+
+    left, right = st.columns([1, 1.6], gap="small")
+    with left:
+        result_filter = st.selectbox(
+            "Результат",
+            ["Все раунды", "Победы", "Поражения"],
+            key=f"round_result_{sid}",
+        )
+    with right:
+        all_tags = sorted({tag for row in rows for tag in row["tags"]})
+        tag_options = ["Все теги"] + [
+            ROUND_TAG_LABELS.get(tag, tag.upper() if tag.endswith("k") else tag)
+            for tag in all_tags
+        ]
+        tag_label = st.selectbox("Тег", tag_options, key=f"round_tag_{sid}")
+    selected_tag = ""
+    if tag_label != "Все теги":
+        for tag in all_tags:
+            label = ROUND_TAG_LABELS.get(tag, tag.upper() if tag.endswith("k") else tag)
+            if label == tag_label:
+                selected_tag = tag
+                break
+    filtered = []
+    for row in rows:
+        if result_filter == "Победы" and not row["won"]:
+            continue
+        if result_filter == "Поражения" and (row["won"] or row["winner"] == "—"):
+            continue
+        if selected_tag and selected_tag not in row["tags"]:
+            continue
+        filtered.append(row)
+    if not filtered:
+        _empty_panel("Под выбранные фильтры раундов нет.")
+    else:
+        cards = []
+        for row in reversed(filtered):
+            tags = "".join(_round_tag_html(tag) for tag in row["tags"])
+            result_class = "win" if row["won"] else "loss" if row["winner"] != "—" else ""
+            duel_class = "entry-win" if row["first_duel_tag"] == "выиграл" else "entry-loss" if row["first_duel_tag"] == "проиграл" else ""
+            site = f' · site {_e(row["plant_site"])}' if row.get("plant_site") else ""
+            cards.append(
+                f"""
+                <div class="round-row {result_class}">
+                    <div class="round-index">R{row["round"]:02d}</div>
+                    <div class="round-side">{_e(row["side"])}</div>
+                    <div class="round-main">
+                        <div class="round-line">
+                            <span class="round-result {result_class}">{_e(row["result"])}</span>
+                            <span class="round-score">{_e(row["score"])}</span>
+                            <span class="round-kd">{row["kills"]}K · {row["deaths"]}D · {row["assists"]}A</span>
+                            <span class="round-damage">{row["damage"]:.0f} dmg{site}</span>
+                        </div>
+                        <div class="round-duel {duel_class}">{_e(row["first_duel"]) or "Без первой дуэли"}</div>
+                        <div class="round-tags">{tags}</div>
+                    </div>
+                    <div class="round-team">{row["team_kills"]}:{row["team_deaths"]}</div>
+                </div>
+                """
+            )
+        _render_html(f'<div class="round-list">{"".join(cards)}</div>')
+        st.caption(
+            "Теги: entry — первый килл; trade — смерть разменяна; clutch — игрок остался "
+            "последним живым; no plant / no defuse — команда не закрыла раунд."
+        )
+
+    export_rows = [
+        {
+            "round": row["round"],
+            "side": row["side"],
+            "result": row["result"],
+            "score": row["score"],
+            "kills": row["kills"],
+            "deaths": row["deaths"],
+            "assists": row["assists"],
+            "damage": round(row["damage"], 1),
+            "first_duel": row["first_duel"],
+            "tags": ", ".join(row["tags"]),
+        }
+        for row in rows
+    ]
+    frame = pd.DataFrame(export_rows)
+    st.download_button(
+        "Скачать раунды CSV",
+        data=frame.to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"parsy_rounds_{sid}.csv",
+        mime="text/csv",
+        key=f"rounds_csv_{sid}",
+        use_container_width=True,
+    )
 
 
 METRIC_HELP = {
@@ -4206,6 +5226,69 @@ def _compare_html(groups: list[dict[str, Any]], reports: dict[str, dict[str, Any
     return f'<div class="compare-card"><div class="compare-list">{"".join(html_rows)}</div></div>'
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, (str, int, bool)) or value is None:
+        return value
+    if hasattr(value, "item"):
+        try:
+            return _json_safe(value.item())
+        except Exception:
+            pass
+    return str(value)
+
+
+def _match_export_payload(
+    demo: DemoData,
+    file_name: str,
+    source: dict[str, Any],
+    groups: list[dict[str, Any]],
+    reports: dict[str, dict[str, Any]],
+    selected_sid: str,
+    rounds: list[dict[str, Any]] | None,
+    demo_hash: str,
+) -> dict[str, Any]:
+    teams = [
+        {
+            "name": _text(group.get("name")),
+            "score": group.get("score"),
+            "players": [
+                {"sid": player.get("sid"), "name": player.get("name")}
+                for player in group.get("players", [])
+            ],
+        }
+        for group in groups
+    ]
+    return _json_safe(
+        {
+            "app": "Parsy",
+            "version": APP_VERSION,
+            "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "demo_hash": demo_hash,
+            "file_name": file_name,
+            "map": demo.match_label(),
+            "rounds_total": len(demo.round_winners) or len(demo.rounds),
+            "selected_sid": selected_sid,
+            "source": {
+                "label": source.get("label"),
+                "server_name": source.get("server_name"),
+                "is_hltv": source.get("is_hltv"),
+                "is_esports": source.get("is_esports"),
+                "teams": source.get("teams"),
+            },
+            "teams": teams,
+            "players": reports,
+            "rounds": rounds or [],
+            "bomb_plants": demo.bomb_plants,
+        }
+    )
+
+
 def _general_tab(
     demo: DemoData,
     file_name: str,
@@ -4214,6 +5297,8 @@ def _general_tab(
     metadata: dict[str, Any],
     reports: dict[str, dict[str, Any]],
     selected_sid: str,
+    rounds: list[dict[str, Any]] | None = None,
+    demo_hash: str = "",
 ) -> None:
     _render_match_banner(demo, file_name, source, groups)
     _render_html(
@@ -4246,6 +5331,29 @@ def _general_tab(
     )
     with st.expander("Все показатели и определения", expanded=False):
         _render_html(_glossary_html())
+
+    _section(
+        "Экспорт матча",
+        "JSON со всеми игроками, раундами, тегами и точками плента. Демка не включается.",
+    )
+    payload = _match_export_payload(
+        demo,
+        file_name,
+        source,
+        groups,
+        reports,
+        selected_sid,
+        rounds,
+        demo_hash,
+    )
+    st.download_button(
+        "Скачать JSON отчёта",
+        data=json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"),
+        file_name=f"{Path(file_name).stem}_parsy.json",
+        mime="application/json",
+        key=f"match_export_{demo_hash or file_name}",
+        use_container_width=True,
+    )
 
 
 def _overview_tab(report: dict[str, Any]) -> None:
@@ -4289,6 +5397,156 @@ def _overview_tab(report: dict[str, Any]) -> None:
             _metric_card("Раунды", _format_number(report["rounds"]), "сыграно в матче"),
         ]
     )
+
+
+def _history_date(value: Any, with_time: bool = False) -> str:
+    text = _text(value)
+    if not text:
+        return "—"
+    try:
+        stamp = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if stamp.tzinfo is not None:
+            stamp = stamp.astimezone()
+        return stamp.strftime("%d.%m.%Y %H:%M" if with_time else "%d.%m.%Y")
+    except ValueError:
+        return text[:16].replace("T", " ")
+
+
+def _history_result_class(value: Any) -> str:
+    result = _text(value).lower()
+    if result == "победа":
+        return "win"
+    if result == "поражение":
+        return "loss"
+    return ""
+
+
+def _history_table_html(entries: list[dict[str, Any]], current_hash: str = "") -> str:
+    if not entries:
+        return ""
+    rows = [
+        '<div class="history-table-row head"><div>Дата</div><div>Матч</div>'
+        "<div>Счёт</div><div>K/D</div><div>ADR</div><div>KAST</div></div>"
+    ]
+    for entry in reversed(entries):
+        current = bool(current_hash and entry.get("demo_hash") == current_hash)
+        result_class = _history_result_class(entry.get("result"))
+        kd_value = _num(entry.get("kd"), 0.0)
+        kd_text = "∞" if kd_value == 0 and _num(entry.get("deaths")) == 0 and _num(entry.get("kills")) > 0 else f"{kd_value:.2f}"
+        rows.append(
+            f"""
+            <div class="history-table-row {'current' if current else ''}">
+                <div class="history-date">{_e(_history_date(entry.get("played_at")))}</div>
+                <div>
+                    <div class="history-map">{_e(entry.get("map_name") or "CS2")}
+                        {'<span class="history-current">текущая</span>' if current else ''}
+                    </div>
+                    <div class="history-file">{_e(entry.get("file_name") or "")}</div>
+                </div>
+                <div class="history-score {result_class}">{_e(entry.get("team_score", 0))}:{_e(entry.get("enemy_score", 0))}</div>
+                <div>{_e(kd_text)}</div>
+                <div>{_num(entry.get("adr")):.1f}</div>
+                <div>{_num(entry.get("kast")):.0f}%</div>
+            </div>
+            """
+        )
+    return f'<div class="history-table">{"".join(rows)}</div>'
+
+
+def _progress_tab(
+    report: dict[str, Any],
+    entries: list[dict[str, Any]],
+    current_hash: str,
+) -> None:
+    _section(
+        "Прогресс",
+        "История хранится локально в SQLite. Повторный разбор той же демки не создаёт дубликат.",
+    )
+    if not entries:
+        _empty_panel(
+            "История пока пустая. Следующий разбор автоматически сохранит матч в локальную базу."
+        )
+        return
+    previous = [entry for entry in entries if entry.get("demo_hash") != current_hash]
+    summary = history.player_summary(report["sid"])
+    current = next(
+        (entry for entry in entries if entry.get("demo_hash") == current_hash),
+        entries[-1],
+    )
+    average_adr = summary["adr"]
+    average_kast = summary["kast"]
+    average_kd = summary["kd"]
+    matches = summary["matches"]
+    win_rate = summary["win_rate"]
+    _render_metric_grid(
+        [
+            _metric_card("Матчей", _format_number(matches), "в локальной истории"),
+            _metric_card("Win Rate", f"{win_rate:.0f}%", f'{summary["wins"]} побед'),
+            _metric_card("Средний ADR", f"{average_adr:.1f}", "по всем матчам"),
+            _metric_card("Средний KAST", f"{average_kast:.0f}%", "по всем матчам"),
+            _metric_card("Средний K/D", f"{average_kd:.2f}", "по всем матчам"),
+            _metric_card(
+                "Текущий ADR",
+                f'{_num(current.get("adr")):.1f}',
+                f'{_num(current.get("adr")) - average_adr:+.1f} к среднему',
+            ),
+        ],
+        big=True,
+    )
+
+    if len(entries) >= 2:
+        _section("Динамика ADR", "Последние матчи в хронологическом порядке; текущий выделен.")
+        dates = [_history_date(entry.get("played_at"), True) for entry in entries]
+        adr_values = [_num(entry.get("adr")) for entry in entries]
+        kast_values = [_num(entry.get("kast")) for entry in entries]
+        kd_values = [_num(entry.get("kd")) for entry in entries]
+        maps = [_text(entry.get("map_name")) for entry in entries]
+        results = [_text(entry.get("result")) for entry in entries]
+        marker_colors = [
+            "#C2A878" if entry.get("demo_hash") == current_hash else "#6F7D80"
+            for entry in entries
+        ]
+        figure = go.Figure(
+            go.Scatter(
+                x=dates,
+                y=adr_values,
+                mode="lines+markers",
+                line={"color": "#C2A878", "width": 2.0, "shape": "spline", "smoothing": 0.75},
+                marker={"size": 7, "color": marker_colors, "line": {"width": 1, "color": "#0A0B0C"}},
+                customdata=list(zip(maps, results, kast_values, kd_values)),
+                hovertemplate=(
+                    "%{x}<br>%{customdata[0]} · %{customdata[1]}<br>"
+                    "ADR %{y:.1f} · KAST %{customdata[2]:.0f}% · K/D %{customdata[3]:.2f}"
+                    "<extra></extra>"
+                ),
+            )
+        )
+        _style_figure(figure, "ADR по матчам", height=330, y_title="ADR")
+        figure.update_yaxes(rangemode="tozero")
+        _render_chart(figure, f'progress_adr_{report["sid"]}')
+
+    _section("Последние матчи", "До 12 записей выбранного игрока.")
+    _render_html(_history_table_html(entries[-12:], current_hash))
+    if previous:
+        best = max(previous, key=lambda entry: _num(entry.get("adr")))
+        worst = min(previous, key=lambda entry: _num(entry.get("adr")))
+        st.caption(
+            f'Лучший ADR до текущего матча: {_num(best.get("adr")):.1f} '
+            f'({_text(best.get("map_name"))}, {_history_date(best.get("played_at"))}). '
+            f'Слабейший: {_num(worst.get("adr")):.1f}.'
+        )
+
+
+def _player_tab(
+    report: dict[str, Any],
+    entries: list[dict[str, Any]],
+    current_hash: str,
+) -> None:
+    overview, progress = st.tabs(["Метрики", "Прогресс"])
+    with overview:
+        _overview_tab(report)
+    with progress:
+        _progress_tab(report, entries, current_hash)
 
 
 def _combat_tab(report: dict[str, Any], demo: DemoData) -> None:
@@ -4677,12 +5935,548 @@ def _clutches_tab(report: dict[str, Any]) -> None:
             )
 
 
+def _team_side_record(demo: DemoData, group: dict[str, Any]) -> dict[str, Any]:
+    sids = [player["sid"] for player in group.get("players", []) if player.get("sid")]
+    rounds = {"T": 0, "CT": 0}
+    wins = {"T": 0, "CT": 0}
+    if not sids or demo.round_info.empty:
+        return {"rounds": rounds, "wins": wins}
+    for row in demo.round_info.itertuples(index=False):
+        tick = getattr(row, "start_tick", None)
+        side = None
+        for sid in sids:
+            side = demo.side_at(sid, tick)
+            if side:
+                break
+        winner = _text(getattr(row, "winner", ""))
+        if side not in rounds:
+            continue
+        rounds[side] += 1
+        if winner == side:
+            wins[side] += 1
+    return {"rounds": rounds, "wins": wins}
+
+
+def _infer_role(report: dict[str, Any]) -> str:
+    kills = max(int(_num(report.get("kills"), 0.0)), 1)
+    rounds = max(int(_num(report.get("rounds"), 0.0)), 1)
+    weapon_stats = report.get("weapon_stats") or []
+    awp_kills = sum(
+        int(_num(item.get("kills"), 0.0))
+        for item in weapon_stats
+        if _text(item.get("weapon")).lower() == "awp"
+    )
+    if awp_kills >= max(3, round(kills * 0.2)):
+        return "AWPER"
+    entry_kills = int(_num(report.get("entry_kills"), 0.0))
+    entry_deaths = int(_num(report.get("entry_deaths"), 0.0))
+    if entry_kills >= 3 and entry_kills >= entry_deaths and entry_kills / rounds >= 0.16:
+        return "ENTRY"
+    assists = int(_num(report.get("assists"), 0.0))
+    effective = int(_num(report.get("effective_flashes"), 0.0))
+    if assists >= max(3, round(kills * 0.28)) or effective >= max(4, round(rounds * 0.3)):
+        return "SUPPORT"
+    traded = int(_num(report.get("traded"), 0.0))
+    deaths = max(int(_num(report.get("deaths"), 0.0)), 1)
+    if traded / deaths >= 0.24:
+        return "TRADE"
+    return "RIFLER"
+
+
+def _team_role_note(role: str) -> str:
+    notes = {
+        "AWPER": "много AWP-киллов",
+        "ENTRY": "выигрывает первые дуэли",
+        "SUPPORT": "ассисты и флешки",
+        "TRADE": "часто разменивает смерти",
+        "RIFLER": "базовый рифл-профиль",
+    }
+    return notes.get(role, "профиль по статистике")
+
+
+def _team_insights(
+    snapshot: dict[str, float],
+    trade_rate: float,
+    side_record: dict[str, Any],
+) -> tuple[list[str], list[str]]:
+    strengths: list[str] = []
+    weaknesses: list[str] = []
+    if snapshot["adr"] >= 72:
+        strengths.append("Команда стабильно наносит урон: средний ADR выше 72.")
+    elif snapshot["adr"] < 62:
+        weaknesses.append("Мало урона в раундах: часть контактов заканчивается без размена.")
+    if snapshot["kast"] >= 72:
+        strengths.append("Высокий KAST: игроки регулярно участвуют в раундах.")
+    elif snapshot["kast"] < 67:
+        weaknesses.append("Низкий KAST: слишком много раундов без килла, ассиста, выживания или трейда.")
+    if snapshot["entry"] >= 50:
+        strengths.append("Первые дуэли выигрываются больше половины — есть контроль входа.")
+    elif snapshot["entry"] < 42:
+        weaknesses.append("Первые дуэли проигрываются: команда часто входит в раунд в меньшинстве.")
+    if trade_rate >= 22:
+        strengths.append("Смерти хорошо размениваются: команда играет рядом.")
+    elif trade_rate < 15:
+        weaknesses.append("Низкий trade rate: после смерти игрока позиция часто не закрывается.")
+    t_rounds = side_record["rounds"]["T"]
+    ct_rounds = side_record["rounds"]["CT"]
+    if t_rounds and side_record["wins"]["T"] / t_rounds < 0.4:
+        weaknesses.append("T-сторона проседает: не хватает выходов и контроля пространства.")
+    if ct_rounds and side_record["wins"]["CT"] / ct_rounds < 0.4:
+        weaknesses.append("CT-сторона проседает: ретейки и удержание позиций требуют работы.")
+    if not strengths:
+        strengths.append("Ровный командный профиль без выраженного провала.")
+    if not weaknesses:
+        weaknesses.append("Явных слабых зон по статистике нет — усложняйте тренировки.")
+    return strengths[:3], weaknesses[:3]
+
+
+def _team_tab(
+    demo: DemoData,
+    groups: list[dict[str, Any]],
+    reports: dict[str, dict[str, Any]],
+    sid: str,
+) -> None:
+    _section(
+        "Командный отчёт",
+        "Срез по составу: роли по статистике, стороны, пленты и зоны роста.",
+    )
+    if not groups:
+        _empty_panel("Не удалось выделить команды в этой демке.")
+        return
+    names = [str(group.get("name") or f"Команда {'AB'[index]}") for index, group in enumerate(groups)]
+    default_index = 0
+    for index, group in enumerate(groups):
+        if any(player.get("sid") == sid for player in group.get("players", [])):
+            default_index = index
+            break
+    selected_name = st.selectbox(
+        "Команда",
+        names,
+        index=default_index,
+        key=f"team_select_{sid}",
+    )
+    selected_index = names.index(selected_name)
+    group = groups[selected_index]
+    opponent = groups[1 - selected_index] if len(groups) > 1 else None
+    members = [
+        player
+        for player in group.get("players", [])
+        if player.get("sid") in reports
+    ]
+    if not members:
+        _empty_panel("Для этой команды нет рассчитанных игроков.")
+        return
+    member_sids = {player["sid"] for player in members}
+    values = [reports[player["sid"]] for player in members]
+    snapshot = _team_snapshot(group, reports)
+    score = int(_num(group.get("score"), 0.0))
+    total_rounds = len(demo.rounds)
+    enemy_score = max(total_rounds - score, 0)
+    side_record = _team_side_record(demo, group)
+    deaths = sum(item["deaths"] for item in values)
+    traded = sum(item["traded"] for item in values)
+    trade_rate = traded / max(deaths, 1) * 100.0
+    entry_wins = sum(item["entry_kills"] for item in values)
+    entry_losses = sum(item["entry_deaths"] for item in values)
+    clutches_won = sum(
+        item["clutches"][size]["won"] for item in values for size in (1, 2, 3)
+    )
+    team_flashes = sum(item["team_flashes"] for item in values)
+    plants = [item for item in demo.bomb_plants if item.get("sid") in member_sids]
+    sites: Counter[str] = Counter(
+        (item.get("site") or "?").upper() for item in plants
+    )
+    t_rounds = side_record["rounds"]["T"]
+    plant_rate = len(plants) / t_rounds * 100.0 if t_rounds else 0.0
+
+    _render_metric_grid(
+        [
+            _metric_card("Счёт", f"{score}:{enemy_score}", f"{len(members)} игроков"),
+            _metric_card("Средний ADR", f'{snapshot["adr"]:.1f}', "урон за раунд"),
+            _metric_card("Средний KAST", f'{snapshot["kast"]:.0f}%', "участие в раундах"),
+            _metric_card(
+                "Opening",
+                f"{entry_wins} / {entry_losses}",
+                "выиграно / проиграно первых дуэлей",
+            ),
+            _metric_card("Trade Rate", f"{trade_rate:.0f}%", f"{traded} из {deaths} смертей"),
+            _metric_card("Клатчи", _format_number(clutches_won), "выигранные 1vX"),
+            _metric_card("Пленты", _format_number(len(plants)), f"{plant_rate:.0f}% T-раундов"),
+            _metric_card("Тимфлеши", _format_number(team_flashes), "ослепления союзников"),
+        ],
+        big=True,
+    )
+
+    if opponent:
+        _section("Сравнение с соперником", "Средние и суммарные показатели двух составов.")
+        _render_html(_compare_html([group, opponent], reports))
+
+    _section("Состав", "Роль — эвристика по статистике демки, а не замена IGL или тренеру.")
+    roster_rows = [
+        '<div class="team-row head"><div>Игрок</div><div>Роль</div><div>K/D</div>'
+        "<div>ADR</div><div>KAST</div><div>Entry</div><div>Utility</div></div>"
+    ]
+    for item in sorted(values, key=lambda value: -value["adr"]):
+        role = _infer_role(item)
+        entry_attempts = item["entry_kills"] + item["entry_deaths"]
+        entry_rate = item["entry_kills"] / entry_attempts * 100.0 if entry_attempts else 0.0
+        roster_rows.append(
+            f"""
+            <div class="team-row">
+                <div class="name">{_e(item["name"])}</div>
+                <div class="role" title="{_e(_team_role_note(role))}">{_e(role)}</div>
+                <div>{_e(_kd_text(item))}</div>
+                <div class="{'good' if item['adr'] >= 72 else 'bad' if item['adr'] < 60 else ''}">{item['adr']:.1f}</div>
+                <div class="{'good' if item['kast'] >= 72 else 'bad' if item['kast'] < 65 else ''}">{item['kast']:.0f}%</div>
+                <div>{entry_rate:.0f}%</div>
+                <div>{item['utility_damage']:.0f}</div>
+            </div>
+            """
+        )
+    _render_html(f'<div class="team-roster">{"".join(roster_rows)}</div>')
+
+    left, right = st.columns(2, gap="medium")
+    with left:
+        _section("Стороны", "Победы на T и CT по завершённым раундам.")
+        side_cards = []
+        for side in ("T", "CT"):
+            count = side_record["rounds"][side]
+            wins = side_record["wins"][side]
+            rate = wins / count * 100.0 if count else 0.0
+            side_cards.append(
+                _metric_card(side, f"{wins} / {count}", f"{rate:.0f}% побед")
+            )
+        _render_metric_grid(side_cards)
+    with right:
+        _section("Пленты", "Куда команда ставит бомбу и как часто доходит до плента.")
+        site_cards = [
+            _metric_card("Site A", _format_number(sites.get("A", 0)), "установок"),
+            _metric_card("Site B", _format_number(sites.get("B", 0)), "установок"),
+            _metric_card("Другие", _format_number(sum(sites.values()) - sites.get("A", 0) - sites.get("B", 0)), "без сайта"),
+        ]
+        _render_metric_grid(site_cards)
+
+    strengths, weaknesses = _team_insights(snapshot, trade_rate, side_record)
+    _section("Зоны роста", "Автоматические выводы по средним показателям состава.")
+    strengths_html = "".join(
+        f'<div class="ai-item"><div class="ai-item-text">{_e(item)}</div></div>'
+        for item in strengths
+    )
+    weaknesses_html = "".join(
+        f'<div class="ai-item"><div class="ai-item-text">{_e(item)}</div></div>'
+        for item in weaknesses
+    )
+    _render_html(
+        f"""
+        <div class="ai-columns">
+            <div class="ai-panel">
+                <div class="ai-panel-title">Сильные стороны</div>
+                <div class="ai-list">{strengths_html}</div>
+            </div>
+            <div class="ai-panel">
+                <div class="ai-panel-title">Что подкачать</div>
+                <div class="ai-list">{weaknesses_html}</div>
+            </div>
+        </div>
+        """
+    )
+
+    team_frame = pd.DataFrame(
+        [
+            {
+                "player": item["name"],
+                "role": _infer_role(item),
+                "kd": _kd_text(item),
+                "adr": round(item["adr"], 1),
+                "kast": round(item["kast"], 1),
+                "entry_kills": item["entry_kills"],
+                "entry_deaths": item["entry_deaths"],
+                "utility_damage": round(item["utility_damage"], 1),
+                "clutches_won": sum(item["clutches"][size]["won"] for size in (1, 2, 3)),
+            }
+            for item in values
+        ]
+    )
+    st.download_button(
+        "Скачать команду CSV",
+        data=team_frame.to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"parsy_team_{sid}.csv",
+        mime="text/csv",
+        key=f"team_csv_{sid}",
+        use_container_width=True,
+    )
+
+
+def _map_points(
+    demo: DemoData,
+    sid: str,
+    kind: str,
+    side_filter: str,
+) -> list[dict[str, Any]]:
+    points: list[dict[str, Any]] = []
+    for death in _death_records(demo):
+        if kind == "death" and death["victim"] != sid:
+            continue
+        if kind == "kill" and death["attacker"] != sid:
+            continue
+        if death["attacker"] == sid and death["victim"] == sid:
+            continue
+        position = demo.position_at(sid, death["tick"])
+        if not position:
+            continue
+        side = demo.side_at(sid, death["tick"])
+        if side_filter in {"T", "CT"} and side != side_filter:
+            continue
+        x, y = position
+        opponent = death["victim"] if kind == "kill" else death["attacker"]
+        points.append(
+            {
+                "x": x,
+                "y": y,
+                "round": death["round"],
+                "side": side or "—",
+                "opponent": demo.player_names.get(opponent, opponent or "—"),
+                "weapon": _weapon_label(death["weapon"]),
+            }
+        )
+    return points
+
+
+def _site_centroids(demo: DemoData) -> dict[str, tuple[float, float]]:
+    grouped: dict[str, list[tuple[float, float]]] = defaultdict(list)
+    for item in demo.bomb_plants:
+        site = _text(item.get("site")).upper()
+        if site in {"A", "B"}:
+            grouped[site].append((float(item["x"]), float(item["y"])))
+    return {
+        site: (
+            sum(point[0] for point in points) / len(points),
+            sum(point[1] for point in points) / len(points),
+        )
+        for site, points in grouped.items()
+        if points
+    }
+
+
+def _nearest_site(
+    x: float,
+    y: float,
+    centroids: dict[str, tuple[float, float]],
+    limit: float = 1400.0,
+) -> str:
+    best_site = ""
+    best_distance = limit
+    for site, (site_x, site_y) in centroids.items():
+        distance = math.hypot(x - site_x, y - site_y)
+        if distance < best_distance:
+            best_site = site
+            best_distance = distance
+    return best_site or "вне"
+
+
+def _map_tab(demo: DemoData, sid: str, report: dict[str, Any]) -> None:
+    _section(
+        "Карта активности",
+        "Плотность позиций и точки дуэлей в координатах демки. Без radar-подложки, "
+        "поэтому ориентиры — сайты плента и координатная сетка.",
+    )
+    if demo.positions.empty:
+        _empty_panel(
+            "Не удалось загрузить позиции игроков. Карта недоступна для этой демки."
+        )
+        return
+    controls = st.columns([1, 1, 1, 1], gap="small")
+    with controls[0]:
+        side_filter = st.selectbox(
+            "Сторона",
+            ["Все", "T", "CT"],
+            key=f"map_side_{sid}",
+        )
+    with controls[1]:
+        show_deaths = st.checkbox("Смерти", value=True, key=f"map_deaths_{sid}")
+    with controls[2]:
+        show_kills = st.checkbox("Убийства", value=True, key=f"map_kills_{sid}")
+    with controls[3]:
+        show_activity = st.checkbox("Активность", value=True, key=f"map_activity_{sid}")
+    if side_filter == "Все":
+        side_filter = ""
+
+    positions = demo.positions[demo.positions["sid"] == sid].copy()
+    if side_filter:
+        positions = positions[positions["side"] == side_filter]
+    positions = positions[positions["alive"].astype(bool)]
+    deaths = _map_points(demo, sid, "death", side_filter)
+    kills = _map_points(demo, sid, "kill", side_filter)
+
+    figure = go.Figure()
+    if show_activity and not positions.empty:
+        figure.add_trace(
+            go.Histogram2d(
+                x=positions["x"],
+                y=positions["y"],
+                nbinsx=30,
+                nbinsy=30,
+                colorscale=[
+                    [0.0, "#0A0B0C"],
+                    [0.18, "#2B2923"],
+                    [0.52, "#6E5B40"],
+                    [1.0, "#C2A878"],
+                ],
+                opacity=0.82,
+                showscale=False,
+                hoverinfo="skip",
+                name="Активность",
+            )
+        )
+    if show_deaths and deaths:
+        figure.add_trace(
+            go.Scatter(
+                x=[item["x"] for item in deaths],
+                y=[item["y"] for item in deaths],
+                mode="markers",
+                name="Смерти",
+                marker={
+                    "symbol": "x",
+                    "size": 9,
+                    "color": "rgba(194, 107, 95, 0.92)",
+                    "line": {"width": 1.2, "color": "rgba(220, 150, 138, 0.7)"},
+                },
+                customdata=[
+                    [item["round"], item["side"], item["opponent"], item["weapon"]]
+                    for item in deaths
+                ],
+                hovertemplate=(
+                    "Смерть · раунд %{customdata[0]}<br>%{customdata[2]} · "
+                    "%{customdata[3]}<extra></extra>"
+                ),
+            )
+        )
+    if show_kills and kills:
+        figure.add_trace(
+            go.Scatter(
+                x=[item["x"] for item in kills],
+                y=[item["y"] for item in kills],
+                mode="markers",
+                name="Убийства",
+                marker={
+                    "symbol": "circle",
+                    "size": 8,
+                    "color": "rgba(143, 175, 146, 0.92)",
+                    "line": {"width": 1.1, "color": "rgba(190, 214, 192, 0.7)"},
+                },
+                customdata=[
+                    [item["round"], item["side"], item["opponent"], item["weapon"]]
+                    for item in kills
+                ],
+                hovertemplate=(
+                    "Убийство · раунд %{customdata[0]}<br>%{customdata[2]} · "
+                    "%{customdata[3]}<extra></extra>"
+                ),
+            )
+        )
+    centroids = _site_centroids(demo)
+    if centroids:
+        sites = sorted(centroids)
+        figure.add_trace(
+            go.Scatter(
+                x=[centroids[site][0] for site in sites],
+                y=[centroids[site][1] for site in sites],
+                mode="markers+text",
+                text=sites,
+                textposition="top center",
+                name="Сайты",
+                marker={
+                    "symbol": "diamond",
+                    "size": 13,
+                    "color": "rgba(194, 168, 120, 0.82)",
+                    "line": {"width": 1, "color": "#E9E4D8"},
+                },
+                textfont={"color": "#E9E4D8", "size": 12},
+                hovertemplate="Сайт %{text}<extra></extra>",
+            )
+        )
+    if not figure.data:
+        _empty_panel("Нет позиций под выбранные фильтры.")
+        return
+
+    _style_figure(figure, f"Карта активности · {_text(report.get('name'))}", height=520)
+    figure.update_layout(
+        showlegend=True,
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "right",
+            "x": 1,
+            "font": {"color": "#8A8780", "size": 10},
+            "bgcolor": "rgba(0,0,0,0)",
+        },
+        margin={"l": 8, "r": 8, "t": 54, "b": 8},
+    )
+    figure.update_xaxes(visible=False, showgrid=False)
+    figure.update_yaxes(
+        visible=False,
+        showgrid=False,
+        scaleanchor="x",
+        scaleratio=1,
+    )
+    _render_chart(figure, f'map_{sid}')
+
+    if centroids:
+        death_sites = Counter(
+            _nearest_site(item["x"], item["y"], centroids) for item in deaths
+        )
+        kill_sites = Counter(
+            _nearest_site(item["x"], item["y"], centroids) for item in kills
+        )
+        _render_metric_grid(
+            [
+                _metric_card(
+                    "Смерти у A",
+                    _format_number(death_sites.get("A", 0)),
+                    "в радиусе сайта A",
+                ),
+                _metric_card(
+                    "Смерти у B",
+                    _format_number(death_sites.get("B", 0)),
+                    "в радиусе сайта B",
+                ),
+                _metric_card(
+                    "Смерти вне сайтов",
+                    _format_number(death_sites.get("вне", 0)),
+                    "дальше 1400 юнитов",
+                ),
+                _metric_card(
+                    "Киллы у A",
+                    _format_number(kill_sites.get("A", 0)),
+                    "в радиусе сайта A",
+                ),
+                _metric_card(
+                    "Киллы у B",
+                    _format_number(kill_sites.get("B", 0)),
+                    "в радиусе сайта B",
+                ),
+                _metric_card(
+                    "Пленты в демке",
+                    _format_number(len(demo.bomb_plants)),
+                    "с известной позицией",
+                ),
+            ]
+        )
+    _render_html(
+        '<div class="map-note">Смерти отмечены крестиками, убийства — кругами. '
+        "Плотность строится по сэмплированным позициям живого игрока. "
+        "Координаты не привязаны к radar-картинке, поэтому используйте их как схему.</div>"
+    )
+
+
 def _ai_tab(
     report: dict[str, Any],
     demo: DemoData,
     groups: list[dict[str, Any]],
     sid: str,
     cache_key: str,
+    rounds: list[dict[str, Any]] | None = None,
 ) -> None:
     player_name = _text(report.get("name"))
     map_name = demo.match_label()
@@ -4764,7 +6558,45 @@ def _ai_tab(
     _section("План на неделю", "Пять коротких сессий: аим, утилита, дуэли, карта и разбор.")
     _render_html(f'<div class="ai-week">{week_html}</div>')
 
+    plan_lines = [
+        f"# Parsy — план для {player_name}",
+        "",
+        f"Карта: {map_name}. {local['summary']}",
+        "",
+        "## Сильные стороны",
+        *[f"- {item}" for item in local["strengths"]],
+        "",
+        "## Что подкачать",
+    ]
+    for item in local["weaknesses"]:
+        plan_lines.extend(
+            [
+                f"### {item['title']}",
+                f"{item['detail']}",
+                f"Цель: {item['target']}",
+                f"Упражнение: {item['drill']}",
+                "",
+            ]
+        )
+    plan_lines.extend(["## План на неделю"])
+    for item in local["week"]:
+        plan_lines.append(
+            f"- {item['day']}, {item['title']} ({item['minutes']} мин): {'; '.join(item['tasks'])}"
+        )
+    st.download_button(
+        "Скачать план Markdown",
+        data="\n".join(plan_lines).encode("utf-8"),
+        file_name=f"parsy_plan_{sid}.md",
+        mime="text/markdown",
+        key=f"ai_plan_download_{cache_key}",
+        use_container_width=True,
+    )
+
     _section("Генеративный разбор", "Необязательно: локальный план уже готов. AI добавит текстовый разбор.")
+    base_url = ""
+    model = ""
+    api_key = ""
+    provider = "Локальный анализ"
     with st.expander("Подключить AI-модель", expanded=False):
         provider = st.selectbox(
             "AI-движок",
@@ -4828,6 +6660,14 @@ def _ai_tab(
             if st.session_state.get(result_key):
                 with st.container(border=True):
                     st.markdown(st.session_state[result_key])
+                st.download_button(
+                    "Скачать AI-разбор",
+                    data=st.session_state[result_key].encode("utf-8"),
+                    file_name=f"parsy_ai_{sid}.md",
+                    mime="text/markdown",
+                    key=f"ai_result_download_{cache_key}_{provider}",
+                    use_container_width=True,
+                )
                 if st.button(
                     "Очистить AI-разбор",
                     key=f"ai_clear_{cache_key}_{provider}",
@@ -4835,6 +6675,81 @@ def _ai_tab(
                 ):
                     st.session_state.pop(result_key, None)
                     st.rerun()
+
+    _section(
+        "Чат по демке",
+        "Спроси про конкретный раунд, слабые места или тренировку. Локальный режим "
+        "отвечает по статистике и тегам; внешняя модель получает только сжатый контекст.",
+    )
+    chat_key = f"ai_chat_{cache_key}"
+    messages = list(st.session_state.get(chat_key) or [])
+    for message in messages[-8:]:
+        role = message.get("role")
+        content = str(message.get("content") or "")
+        if role not in {"user", "assistant"} or not content:
+            continue
+        with st.chat_message(role):
+            st.markdown(content)
+    st.caption(
+        "Примеры: «разбери раунд 5», «почему проиграли», «что тренировать», "
+        "«где я умираю», «какие карты качать»."
+    )
+    with st.form(f"ai_chat_form_{cache_key}"):
+        question = st.text_input(
+            "Вопрос тренеру",
+            key=f"ai_chat_question_{cache_key}",
+            placeholder="Например: разбери раунд 7 и скажи, что можно было сделать иначе",
+        )
+        submitted = st.form_submit_button("Спросить", use_container_width=True)
+    if submitted:
+        cleaned = question.strip()
+        if not cleaned:
+            st.warning("Введи вопрос.")
+        else:
+            settings = {
+                "base_url": base_url,
+                "model": model,
+                "api_key": api_key,
+            }
+            try:
+                if provider == "Локальный анализ":
+                    answer = advisor.local_chat_answer(
+                        cleaned,
+                        report,
+                        local,
+                        map_name,
+                        player_name,
+                        rounds,
+                    )
+                else:
+                    with st.spinner("AI-тренер отвечает..."):
+                        answer = advisor.chat_with_ai(
+                            cleaned,
+                            report,
+                            local,
+                            map_name,
+                            player_name,
+                            rounds,
+                            messages,
+                            settings,
+                        )
+                messages.extend(
+                    [
+                        {"role": "user", "content": cleaned},
+                        {"role": "assistant", "content": answer},
+                    ]
+                )
+                st.session_state[chat_key] = messages[-12:]
+                st.rerun()
+            except Exception as error:
+                st.error(str(error))
+    if messages and st.button(
+        "Очистить чат",
+        key=f"ai_chat_clear_{cache_key}",
+        use_container_width=True,
+    ):
+        st.session_state[chat_key] = []
+        st.rerun()
 
 
 def _format_size(size: int) -> str:
@@ -4972,6 +6887,148 @@ def _render_workspace_bar(
     )
 
 
+def _steam_library_roots() -> list[Path]:
+    candidates: list[Path] = []
+    for key in ("ProgramFiles(x86)", "ProgramFiles"):
+        base = os.environ.get(key)
+        if not base:
+            continue
+        candidates.append(Path(base) / "Steam")
+        candidates.append(Path(base) / "Steam" / "steamapps")
+    for letter in ("C", "D", "E", "F", "G", "H"):
+        candidates.append(Path(f"{letter}:\\SteamLibrary"))
+        candidates.append(Path(f"{letter}:\\Program Files (x86)\\Steam"))
+    candidates.extend(
+        [
+            Path.home() / "Steam",
+            Path.home() / "SteamLibrary",
+        ]
+    )
+    for root in list(candidates):
+        vdf = root / "steamapps" / "libraryfolders.vdf"
+        if not vdf.exists():
+            vdf = root / "libraryfolders.vdf"
+        if not vdf.exists():
+            continue
+        try:
+            text = vdf.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for match in re.finditer(r'"path"\s+"([^"]+)"', text):
+            raw = match.group(1).replace("\\\\", "\\")
+            candidates.append(Path(raw))
+    result: list[Path] = []
+    seen: set[str] = set()
+    for root in candidates:
+        try:
+            key = str(root.resolve()).lower()
+        except OSError:
+            key = str(root).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if root.exists():
+            result.append(root)
+    return result
+
+
+def _steam_replay_dirs() -> list[Path]:
+    relative = [
+        Path("steamapps") / "common" / "Counter-Strike Global Offensive" / "game" / "csgo" / "replays",
+        Path("steamapps") / "common" / "Counter-Strike Global Offensive" / "csgo" / "replays",
+        Path("Counter-Strike Global Offensive") / "game" / "csgo" / "replays",
+    ]
+    result: list[Path] = []
+    override = os.environ.get("PARSY_DEMO_DIR")
+    if override:
+        result.append(Path(override).expanduser())
+    for root in _steam_library_roots():
+        for suffix in relative:
+            candidate = root / suffix
+            if candidate.exists():
+                result.append(candidate)
+    return result
+
+
+def _find_latest_demo() -> Path | None:
+    latest: Path | None = None
+    latest_time = -1.0
+    for folder in _steam_replay_dirs():
+        try:
+            files = list(folder.glob("*.dem"))
+        except OSError:
+            continue
+        for path in files:
+            try:
+                stamp = path.stat().st_mtime
+            except OSError:
+                continue
+            if stamp > latest_time:
+                latest = path
+                latest_time = stamp
+    return latest
+
+
+def _reset_demo_state() -> None:
+    for key in (
+        "demo_obj",
+        "demo_signature",
+        "demo_hash",
+        "history_saved_signature",
+    ):
+        st.session_state.pop(key, None)
+
+
+def _set_local_demo(path: Path) -> None:
+    _reset_demo_state()
+    st.session_state["local_demo_path"] = str(path)
+    st.session_state["upload_token"] = int(st.session_state.get("upload_token", 0)) + 1
+
+
+def _group_for_sid(groups: list[dict[str, Any]], sid: str) -> dict[str, Any] | None:
+    for group in groups:
+        if any(str(player.get("sid") or "") == sid for player in group.get("players", [])):
+            return group
+    return None
+
+
+def _render_recent_history() -> None:
+    try:
+        entries = history.recent_matches(8)
+        total = history.match_count()
+    except Exception:
+        return
+    if not entries:
+        return
+    _section(
+        "История матчей",
+        "Локальная база Parsy на этом компьютере. Демки не сохраняются, только метрики.",
+    )
+    rows = [
+        '<div class="history-table-row head"><div>Дата</div><div>Матч</div>'
+        "<div>Счёт</div><div>Состав</div><div></div><div></div></div>"
+    ]
+    for entry in entries:
+        result_class = _history_result_class(entry.get("result"))
+        rows.append(
+            f"""
+            <div class="history-table-row">
+                <div class="history-date">{_e(_history_date(entry.get("played_at")))}</div>
+                <div>
+                    <div class="history-map">{_e(entry.get("map_name") or "CS2")}</div>
+                    <div class="history-file">{_e(entry.get("file_name") or "")}</div>
+                </div>
+                <div class="history-score {result_class}">{_e(entry.get("team_score", 0))}:{_e(entry.get("enemy_score", 0))}</div>
+                <div>{_num(entry.get("player_count")):.0f}</div>
+                <div></div>
+                <div></div>
+            </div>
+            """
+        )
+    _render_html(f'<div class="history-table">{"".join(rows)}</div>')
+    st.caption(f"Всего матчей в локальной истории: {total}.")
+
+
 def _render_empty_screen() -> None:
     _render_html(
         """
@@ -4985,6 +7042,7 @@ def _render_empty_screen() -> None:
         </div>
         """
     )
+    _render_recent_history()
 
 
 def main() -> None:
@@ -4993,21 +7051,64 @@ def main() -> None:
     with st.sidebar:
         _render_sidebar_brand()
         _render_html('<div class="sidebar-label">Демка</div>')
+        upload_token = int(st.session_state.get("upload_token", 0))
         uploaded = st.file_uploader(
             "Загрузить демку",
             type=["dem"],
             label_visibility="collapsed",
             help="Поддерживаются .dem файлы Counter-Strike 2 размером до 500 МБ.",
             max_upload_size=MAX_UPLOAD_MB,
-            key="demo_upload",
+            key=f"demo_upload_{upload_token}",
         )
         _render_html(
             '<div class="sidebar-note">.dem до 500 МБ. Файл разбирается локально; '
             "для про-профилей отправляются только никнеймы и названия команд.</div>"
         )
+        _render_html(
+            '<div class="sidebar-label" style="margin-top:1rem">Быстрый старт</div>'
+        )
+        if st.button(
+            "Последняя демка Steam",
+            use_container_width=True,
+            key="latest_steam_demo",
+            help="Найти самый свежий .dem в папках Steam или в PARSY_DEMO_DIR.",
+        ):
+            latest = _find_latest_demo()
+            if latest is None:
+                st.info(
+                    "Демки не найдены. Укажите папку через PARSY_DEMO_DIR "
+                    "или загрузите файл вручную."
+                )
+            else:
+                _set_local_demo(latest)
+                st.rerun()
+        local_value = st.session_state.get("local_demo_path")
+        if local_value and uploaded is None:
+            local_name = Path(local_value).name
+            _render_html(
+                f'<div class="sidebar-note">Локально: {_e(local_name)}</div>'
+            )
+            if st.button(
+                "Сбросить локальную демку",
+                use_container_width=True,
+                key="clear_local_demo",
+            ):
+                _reset_demo_state()
+                st.session_state.pop("local_demo_path", None)
+                st.rerun()
         _render_update_sidebar()
 
-    if uploaded is None:
+    if uploaded is not None and st.session_state.get("local_demo_path"):
+        st.session_state.pop("local_demo_path", None)
+
+    local_path = st.session_state.get("local_demo_path")
+    local: Path | None = Path(local_path) if local_path else None
+    if local is not None and not local.is_file():
+        st.session_state.pop("local_demo_path", None)
+        local = None
+        st.sidebar.warning("Локальная демка больше не найдена. Выберите файл заново.")
+
+    if uploaded is None and local is None:
         _render_html(
             """
             <div class="hero">
@@ -5031,18 +7132,36 @@ def main() -> None:
         )
         return
 
-    try:
+    if uploaded is not None:
+        file_name = uploaded.name
         signature = (
-            uploaded.name,
+            "upload",
+            file_name,
             getattr(uploaded, "size", None),
+            getattr(uploaded, "file_id", None),
             DEMO_CACHE_VERSION,
         )
-    except Exception:
-        signature = (uploaded.name, None, DEMO_CACHE_VERSION)
+    else:
+        assert local is not None
+        try:
+            stat = local.stat()
+        except OSError:
+            st.session_state.pop("local_demo_path", None)
+            st.error("Не удалось открыть локальную демку. Выберите файл заново.")
+            return
+        file_name = local.name
+        signature = (
+            "local",
+            str(local.resolve()),
+            stat.st_size,
+            stat.st_mtime_ns,
+            DEMO_CACHE_VERSION,
+        )
 
     demo: DemoData | None = None
+    demo_hash = str(st.session_state.get("demo_hash") or "")
     if st.session_state.get("demo_signature") != signature:
-        raw = uploaded.getvalue()
+        raw = uploaded.getvalue() if uploaded is not None else local.read_bytes()
         if not raw:
             st.error("Файл пустой. Загрузите корректную демку CS2.")
             return
@@ -5052,6 +7171,7 @@ def main() -> None:
             except Exception:
                 st.session_state.pop("demo_obj", None)
                 st.session_state.pop("demo_signature", None)
+                st.session_state.pop("demo_hash", None)
                 st.error(
                     "Не удалось прочитать демку. Файл повреждён, обрезан "
                     "или не является демкой CS2."
@@ -5059,10 +7179,16 @@ def main() -> None:
                 with st.expander("Технические детали"):
                     st.code(traceback.format_exc())
                 return
+        demo_hash = hashlib.sha256(raw).hexdigest()
         st.session_state["demo_obj"] = demo
         st.session_state["demo_signature"] = signature
+        st.session_state["demo_hash"] = demo_hash
     else:
         demo = st.session_state.get("demo_obj")
+        if not demo_hash:
+            raw = uploaded.getvalue() if uploaded is not None else local.read_bytes()
+            demo_hash = hashlib.sha256(raw).hexdigest()
+            st.session_state["demo_hash"] = demo_hash
 
     if demo is None or not all(
         hasattr(demo, attribute)
@@ -5071,7 +7197,7 @@ def main() -> None:
         st.error("Не удалось восстановить разобранную демку. Загрузите файл заново.")
         return
 
-    source = _detect_demo_source(demo, uploaded.name)
+    source = _detect_demo_source(demo, file_name)
     metadata: dict[str, Any] = {"ok": False, "players": {}, "teams": {}, "error": ""}
     if source["is_esports"]:
         with st.spinner("Подтягиваем профили игроков и команд..."):
@@ -5084,6 +7210,9 @@ def main() -> None:
                 metadata["error"] = traceback.format_exc()
 
     groups = _group_teams(demo, metadata, source)
+    score_total = sum(int(_num(group.get("score"))) for group in groups[:2])
+    if score_total <= 0:
+        score_total = len(demo.round_winners) or len(demo.rounds)
     options = _player_options(demo)
     if not options:
         st.error("В демке не удалось найти игроков.")
@@ -5093,7 +7222,7 @@ def main() -> None:
 
     labels = [label for label, _ in options]
     label_to_sid = {label: sid for label, sid in options}
-    widget_key = f"player_select_{uploaded.name}_{getattr(uploaded, 'size', '')}"
+    widget_key = f"player_select_{demo_hash[:16]}"
 
     with st.sidebar:
         _render_html('<div class="sidebar-rule"></div>')
@@ -5103,7 +7232,7 @@ def main() -> None:
                 f"{_text(groups[0].get('name'))}  vs  {_text(groups[1].get('name'))}"
             )
         else:
-            sidebar_match = _text(source.get("server_name")) or uploaded.name
+            sidebar_match = _text(source.get("server_name")) or file_name
         _render_html(
             f"""
             <div class="sidebar-match">
@@ -5123,12 +7252,18 @@ def main() -> None:
             index=0,
             key=widget_key,
             label_visibility="collapsed",
-            help="Выбор меняет профиль во вкладках «Игрок», «Бой», «Утилиты» и «Клатчи».",
+            help=(
+                "Выбор меняет профиль во вкладках «Игрок», «Бой», «Утилиты», "
+                "«Клатчи», «Раунды», «Карта» и «AI-тренер»."
+            ),
         )
         _render_html(
             '<div class="sidebar-note">Общий разбор и составы команд остаются '
             "независимыми от выбранного игрока.</div>"
         )
+        if st.session_state.get("history_error"):
+            with st.expander("Локальная история"):
+                st.code(str(st.session_state["history_error"]))
 
     sid = label_to_sid.get(selected_label, options[0][1])
 
@@ -5148,23 +7283,88 @@ def main() -> None:
             st.code(analysis_error or "Не удалось рассчитать ни одного игрока.")
         return
 
-    general, player_tab, combat, utility, clutches, ai_tab = st.tabs(
-        ["Общий", "Игрок", "Бой", "Утилиты", "Клатчи", "AI-тренер"]
+    selected_group = _group_for_sid(groups, sid)
+    try:
+        round_rows = build_round_review(demo, sid, report, selected_group)
+    except Exception:
+        round_rows = []
+
+    if st.session_state.get("history_saved_signature") != signature:
+        played_at = None
+        if uploaded is None and local is not None:
+            try:
+                played_at = (
+                    datetime.fromtimestamp(local.stat().st_mtime)
+                    .astimezone()
+                    .isoformat(timespec="seconds")
+                )
+            except OSError:
+                played_at = None
+        try:
+            for player in demo.players:
+                player_sid = str(player.get("sid") or "")
+                player_report = reports.get(player_sid)
+                if not player_report:
+                    continue
+                history.save_match(
+                    demo_hash=demo_hash,
+                    report=player_report,
+                    group=_group_for_sid(groups, player_sid),
+                    total_rounds=score_total,
+                    file_name=file_name,
+                    map_name=demo.match_label(),
+                    source_label=_text(source.get("label")),
+                    played_at=played_at,
+                )
+            st.session_state["history_saved_signature"] = signature
+            st.session_state.pop("history_error", None)
+        except Exception:
+            st.session_state["history_error"] = traceback.format_exc()
+
+    try:
+        history_entries = history.player_history(sid, 30)
+    except Exception:
+        history_entries = []
+
+    (
+        general,
+        player_tab,
+        combat,
+        utility,
+        clutches,
+        rounds_tab,
+        map_tab,
+        team_tab,
+        ai_tab,
+    ) = st.tabs(
+        [
+            "Общий",
+            "Игрок",
+            "Бой",
+            "Утилиты",
+            "Клатчи",
+            "Раунды",
+            "Карта",
+            "Команда",
+            "AI-тренер",
+        ]
     )
 
     with general:
         _general_tab(
             demo,
-            uploaded.name,
+            file_name,
             source,
             groups,
             metadata,
             reports,
             sid,
+            rounds=round_rows,
+            demo_hash=demo_hash,
         )
 
     with player_tab:
-        _overview_tab(report)
+        _player_tab(report, history_entries, demo_hash)
 
     with combat:
         _combat_tab(report, demo)
@@ -5175,8 +7375,17 @@ def main() -> None:
     with clutches:
         _clutches_tab(report)
 
+    with rounds_tab:
+        _rounds_tab(demo, sid, report, selected_group, round_rows)
+
+    with map_tab:
+        _map_tab(demo, sid, report)
+
+    with team_tab:
+        _team_tab(demo, groups, reports, sid)
+
     with ai_tab:
-        _ai_tab(report, demo, groups, sid, f"{signature[0]}_{signature[1]}_{sid}")
+        _ai_tab(report, demo, groups, sid, f"{demo_hash}_{sid}", round_rows)
 
     _render_html(
         '<div class="footer-note">Parsy · локальный разбор демки · '

@@ -1,5 +1,5 @@
 #define MyAppName "Parsy"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "Parsy"
 #define MyAppExeName "Parsy.exe"
 
@@ -29,7 +29,7 @@ RestartApplications=no
 UsePreviousAppDir=yes
 UsePreviousTasks=yes
 SetupLogging=yes
-VersionInfoVersion=1.1.0.0
+VersionInfoVersion=1.2.0.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Setup
 VersionInfoProductName={#MyAppName}
