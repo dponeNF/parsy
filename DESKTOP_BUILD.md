@@ -139,7 +139,7 @@ py -m streamlit run app.py
 3. `version_info.txt` → `filevers`, `prodvers`, строковые версии.
 4. `installer\Parsy.iss` → `#define MyAppVersion`.
 5. `VersionInfoVersion` в `installer\Parsy.iss`.
-6. `README.md`, `DESKTOP_BUILD.md`, `PUBLISH.md` и release notes.
+6. `README.md`, `DESKTOP_BUILD.md` и release notes.
 
 После этого выполнить `build.ps1`. Имя Setup-файла изменится автоматически. Для автообновления важны tag, имя и digest ассета в GitHub Release.
 
